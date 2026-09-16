@@ -1,5 +1,5 @@
-__pycache__/
-*.py[cod]
 .venv/
-.env
+__pycache__/
+*.pyc
+data_runtime/
 .DS_Store
