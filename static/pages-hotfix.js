@@ -1,37 +1,9 @@
 (() => {
-  const upstreamFetch = window.fetch.bind(window);
-
-  function asUrl(input) {
-    if (input instanceof URL) return new URL(input.href);
-    if (typeof input === 'string') return new URL(input, location.href);
-    if (input?.url) return new URL(input.url, location.href);
-    return new URL(String(input ?? ''), location.href);
-  }
-
-  window.fetch = async (input, init) => {
-    const url = asUrl(input);
-    const path = url.pathname.match(/\/api\/.*$/)?.[0] || '';
-
-    // pages-api.js treats Number(null) as 0. Explicit NaN keeps an
-    // unselected credit range from becoming an accidental 0-credit filter.
-    if (path === '/api/courses') {
-      if (!url.searchParams.has('min_credits')) url.searchParams.set('min_credits', 'NaN');
-      if (!url.searchParams.has('max_credits')) url.searchParams.set('max_credits', 'NaN');
-      // Pass a string because the current Pages API shim reads string/Request
-      // inputs, not URL objects.
-      return upstreamFetch(url.href, init);
-    }
-
-    return upstreamFetch(input, init);
-  };
-
   function enforcePagesOnlyControls() {
     const build = document.querySelector('#buildIndexBtn');
     if (build) {
-      if (!build.disabled) build.disabled = true;
-      if (build.textContent !== '由 GitHub Actions 自動更新') {
-        build.textContent = '由 GitHub Actions 自動更新';
-      }
+      build.disabled = true;
+      build.textContent = '由 GitHub Actions 自動更新';
     }
 
     const studyLevel = document.querySelector('#studyLevelSelect');
