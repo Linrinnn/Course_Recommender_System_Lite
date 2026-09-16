@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import os
 import time
 import urllib.parse
@@ -20,10 +21,13 @@ HT = int(os.environ.get("FJU_HT", "1"))
 LCID = int(os.environ.get("FJU_LCID", "1028"))
 SCO_TYP = int(os.environ.get("FJU_SCO_TYP", "100"))
 CACHE_SECONDS = int(os.environ.get("FJU_CACHE_SECONDS", "600"))
+FETCH_CONCURRENCY = max(1, min(int(os.environ.get("FJU_FETCH_CONCURRENCY", "4")), 8))
+SEMESTER_START = os.environ.get("FJU_SEMESTER_START", "2026-09-14")
+SEMESTER_WEEKS = int(os.environ.get("FJU_SEMESTER_WEEKS", "18"))
 PAGE_SIZE = 100
 STATIC_DIR = Path(__file__).parent / "static"
 
-app = FastAPI(title="FJU Course Recommender Lite", docs_url=None, redoc_url=None)
+app = FastAPI(title="FJU Course Recommender Lite+", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 _cache: dict[str, Any] = {"at": 0.0, "courses": []}
@@ -35,7 +39,7 @@ def _fetch_json_sync(endpoint: str, params: dict[str, Any]) -> dict[str, Any]:
     request = urllib.request.Request(
         f"{BASE_URL}/{endpoint}?{query}",
         headers={
-            "User-Agent": "Mozilla/5.0 FJU-Course-Recommender-Lite/1.0",
+            "User-Agent": "Mozilla/5.0 FJU-Course-Recommender-LitePlus/1.0",
             "Accept": "application/json,text/plain,*/*",
         },
     )
@@ -70,6 +74,13 @@ def _first(row: dict[str, Any], *keys: str) -> Any:
     return None
 
 
+def _number(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _meetings(row: dict[str, Any]) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
     for item in row.get("seqList") or []:
@@ -89,13 +100,15 @@ def _meetings(row: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _normalize(row: dict[str, Any]) -> dict[str, Any]:
     jon = _first(row, "jonCouSn", "jon_cou_sn")
+    credits = _first(row, "credit", "credits")
     return {
         "id": _string(jon),
         "course_code": _string(_first(row, "avaNO", "jAvaNO", "couNo")),
         "name": _string(_first(row, "couCNa", "courseName", "name")),
         "name_en": _string(_first(row, "couENa", "courseNameEn")),
         "teacher": _string(_first(row, "tchCNa", "teacherName", "tchName")),
-        "credits": _first(row, "credit", "credits"),
+        "credits": credits,
+        "credits_number": _number(credits),
         "required_elective": _string(_first(row, "reqSelCNa", "requiredElective")),
         "department": _string(_first(row, "dptGrdCN", "dptCNa", "departmentName", "unitName")),
         "class_group": _string(_first(row, "clsCNa", "className", "class_group")),
@@ -118,9 +131,13 @@ async def _load_courses(force: bool = False) -> list[dict[str, Any]]:
             result = first.get("result") or {}
             total_pages = int(result.get("totalPages") or 1)
             rows = list(result.get("result") or [])
-            for page in range(2, total_pages + 1):
-                payload = await _fetch_page(page)
-                rows.extend((payload.get("result") or {}).get("result") or [])
+
+            for start in range(2, total_pages + 1, FETCH_CONCURRENCY):
+                pages = range(start, min(start + FETCH_CONCURRENCY, total_pages + 1))
+                payloads = await asyncio.gather(*(_fetch_page(page) for page in pages))
+                for payload in payloads:
+                    rows.extend((payload.get("result") or {}).get("result") or [])
+
             courses = [_normalize(row) for row in rows]
             courses = [course for course in courses if course["id"] and course["name"]]
             _cache.update({"at": time.monotonic(), "courses": courses})
@@ -138,19 +155,37 @@ async def index() -> FileResponse:
 
 @app.get("/api/meta")
 async def meta() -> dict[str, Any]:
-    return {"academic_year": HY, "semester": HT, "cache_seconds": CACHE_SECONDS}
+    return {
+        "academic_year": HY,
+        "semester": HT,
+        "cache_seconds": CACHE_SECONDS,
+        "semester_start": SEMESTER_START,
+        "semester_weeks": SEMESTER_WEEKS,
+    }
 
 
 @app.get("/api/courses")
 async def courses(
     q: str = Query("", max_length=100),
+    teacher: str = Query("", max_length=50),
+    department: str = Query("", max_length=80),
+    class_group: str = Query("", max_length=80),
     weekday: int | None = Query(None, ge=1, le=7),
+    section: str = Query("", max_length=20),
     required_elective: str = Query("", max_length=20),
+    min_credits: float | None = Query(None, ge=0, le=30),
+    max_credits: float | None = Query(None, ge=0, le=30),
+    timed_only: bool = Query(False),
+    sort: str = Query("name", pattern="^(name|teacher|credits)$"),
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=100),
+    page_size: int = Query(30, ge=1, le=100),
 ) -> dict[str, Any]:
     items = await _load_courses()
     needle = q.strip().casefold()
+    teacher_q = teacher.strip().casefold()
+    dept_q = department.strip().casefold()
+    class_q = class_group.strip().casefold()
+    section_q = section.strip().casefold()
     req = required_elective.strip().casefold()
 
     def matches(course: dict[str, Any]) -> bool:
@@ -167,20 +202,50 @@ async def courses(
             ).casefold()
             if needle not in haystack:
                 return False
+        if teacher_q and teacher_q not in course["teacher"].casefold():
+            return False
+        if dept_q and dept_q not in course["department"].casefold():
+            return False
+        if class_q and class_q not in course["class_group"].casefold():
+            return False
         if weekday and not any(meeting.get("weekday") == weekday for meeting in course["meetings"]):
             return False
+        if section_q and not any(
+            section_q in str(section_item).casefold()
+            for meeting in course["meetings"]
+            for section_item in meeting.get("sections") or []
+        ):
+            return False
         if req and req not in course["required_elective"].casefold():
+            return False
+        credits = course.get("credits_number")
+        if min_credits is not None and (credits is None or credits < min_credits):
+            return False
+        if max_credits is not None and (credits is None or credits > max_credits):
+            return False
+        if timed_only and not course["meetings"]:
             return False
         return True
 
     filtered = [course for course in items if matches(course)]
+    if sort == "teacher":
+        filtered.sort(key=lambda course: (course["teacher"].casefold(), course["name"].casefold()))
+    elif sort == "credits":
+        filtered.sort(key=lambda course: (course["credits_number"] is None, course["credits_number"] or 0, course["name"].casefold()))
+    else:
+        filtered.sort(key=lambda course: course["name"].casefold())
+
+    total = len(filtered)
+    total_pages = max(1, math.ceil(total / page_size))
+    page = min(page, total_pages)
     start = (page - 1) * page_size
     end = start + page_size
     return {
         "items": filtered[start:end],
-        "total": len(filtered),
+        "total": total,
         "page": page,
         "page_size": page_size,
+        "total_pages": total_pages,
         "academic_year": HY,
         "semester": HT,
     }
