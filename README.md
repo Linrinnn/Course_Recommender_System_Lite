@@ -1,6 +1,6 @@
 # FJU Course Recommender Lite+
 
-[`hyslchs/Course_Recommender_System`](https://github.com/hyslchs/Course_Recommender_System) 的精簡衍生版。目標不是把原專案砍成只有幾個篩選器，而是保留日常選課真正需要的「完整課程搜尋 + 獨立課表 + 節次找課」，同時移除 Embedding/RAG、React 建置鏈、分析儀表板等較重的部分。
+[`hyslchs/Course_Recommender_System`](https://github.com/hyslchs/Course_Recommender_System) 的精簡衍生版。目標不是把原專案砍成只有幾個篩選器，而是保留日常選課真正需要的「完整課程搜尋 + 浮動課表 + 節次找課」，同時移除 Embedding/RAG、React 建置鏈、分析儀表板等較重的部分。
 
 ## 目前功能
 
@@ -29,16 +29,50 @@
 
 關鍵字搜尋採確定性欄位加權，不使用生成式 AI。課名、課號與教師權重較高，課程目標、每週進度、先修、教材與能力欄位也會參與搜尋。
 
-### 獨立課表
+### 浮動課表
 
-- `/schedule` 為獨立課表畫面，可由主搜尋另外開視窗。
+- 主搜尋頁按「查看課表」後，以 Modal 浮層顯示課表，不會跳離搜尋頁。
+- `/schedule` 仍保留作為備用的獨立課表頁。
 - 多個課表方案：新增、改名、切換、刪除、清空。
 - D0～E4 視覺化週課表。
 - 點任何空白或已有課程的節次，可以直接搜尋「星期 + 節次」的所有課。
 - 節次結果可再用課名、教師、課號或系所縮小。
 - 可以直接加入目前方案，並檢查同星期＋重疊節次的衝堂。
-- 可以將同一組星期＋節次帶回主搜尋頁，再套完整篩選條件。
 - 課表保存在瀏覽器 `localStorage`，不需要帳號。
+
+## GitHub Pages 網頁版
+
+本專案支援 GitHub Pages，不需要自己的電腦持續開著。
+
+運作方式：
+
+```text
+GitHub Actions
+   │
+   ├─ 讀取輔大公開課程 API
+   ├─ 建立／續跑完整課綱索引
+   ├─ 產生 dist/data/catalog.json
+   └─ 部署到 GitHub Pages
+          │
+          ▼
+瀏覽器直接搜尋、篩選、排課
+```
+
+Pages 版使用 `static/pages-api.js` 在瀏覽器端提供與 FastAPI 相容的查詢介面，因此主搜尋、進階篩選、浮動課表與節次找課可以沿用同一套前端。
+
+第一次使用 GitHub Pages 時，到 repository 的：
+
+```text
+Settings → Pages → Build and deployment → Source → GitHub Actions
+```
+
+之後 `.github/workflows/pages.yml` 會在 `main` 更新時部署，也可從 Actions 手動執行；另外每週會自動更新一次課程快照。完整索引資料透過 GitHub Actions cache 續跑，避免每次從零開始。
+
+預設網址會是：
+
+```text
+https://linrinnn.github.io/Course_Recommender_System_Lite/
+```
 
 ## 完整搜尋索引
 
@@ -50,7 +84,7 @@
 - `OutlineMaintain/CourseCP`
 - `OutlineMaintain/CourseMethods`
 
-完整索引會寫入：
+本機版完整索引會寫入：
 
 ```text
 data_runtime/enriched_<學年度>_<學期>.jsonl
@@ -58,10 +92,7 @@ data_runtime/enriched_<學年度>_<學期>.jsonl
 
 索引可續跑。程式中斷或關閉後再次建立，只處理尚未完成的課程。
 
-你有兩種建立方式：
-
-1. 在網站頂端按「建立／續跑完整索引」。
-2. 命令列執行：
+本機可在網站頂端按「建立／續跑完整索引」，或執行：
 
 ```bash
 python build_catalog.py
@@ -81,7 +112,7 @@ python build_catalog.py --concurrency 4
 
 建議不要把 concurrency 調得過高，以降低對學校公開 API 的負載。
 
-## 啟動
+## 本機啟動
 
 需求：Python 3.11+
 
@@ -120,19 +151,11 @@ FJU_SEMESTER_WEEKS=18
 ## 架構
 
 ```text
-瀏覽器：原生 HTML / CSS / JS
-   │
-   ├─ 主搜尋
-   ├─ 獨立課表 / 節次找課
-   └─ localStorage 課表方案
-   │
-FastAPI
-   │
-   ├─ 全校列表 API → 基本搜尋
-   ├─ detail API → 完整索引
-   └─ data_runtime/*.jsonl → 可續跑本機索引
-   │
-輔仁大學公開課程大綱 API
+本機模式
+瀏覽器 → FastAPI → 輔大公開 API / data_runtime
+
+GitHub Pages 模式
+GitHub Actions → 靜態 catalog.json → 瀏覽器端 pages-api.js → 搜尋／課表
 ```
 
 ## 與原專案的差異
@@ -150,10 +173,12 @@ FastAPI
 ## 驗證
 
 ```bash
-python -m py_compile app.py catalog.py build_catalog.py
+python -m py_compile app.py catalog.py build_catalog.py build_pages.py
 python -m unittest discover -s tests -v
 node --check static/app.js
 node --check static/schedule.js
+node --check static/schedule-modal.js
+node --check static/pages-api.js
 ```
 
 離線測試不需要連輔大 API；實際課程資料與完整索引仍以當學期公開 API 為準。
