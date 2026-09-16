@@ -12,6 +12,19 @@
       const field = studyLevel.closest('label');
       if (field) field.hidden = !useful;
     }
+
+    const departmentSelect = document.querySelector('#departmentSelect');
+    const departmentLabel = departmentSelect?.closest('label')?.querySelector('span');
+    if (departmentLabel) departmentLabel.textContent = '系所代碼';
+
+    const scheduleButton = document.querySelector('#openScheduleBtn');
+    if (scheduleButton) {
+      const count = document.querySelector('#scheduleCount')?.textContent || '0';
+      scheduleButton.innerHTML = `查看課表 <span id="scheduleCount">${count}</span>`;
+    }
+
+    const refreshButton = document.querySelector('#refreshBtn');
+    if (refreshButton) refreshButton.textContent = '重新載入資料';
   }
 
   document.addEventListener('DOMContentLoaded', () => {
