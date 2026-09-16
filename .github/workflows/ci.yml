@@ -38,3 +38,4 @@ jobs:
           node --check static/schedule.js
           node --check static/schedule-modal.js
           node --check static/pages-api.js
+          node --check static/department-fix.js
