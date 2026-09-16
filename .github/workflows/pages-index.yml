@@ -16,11 +16,11 @@ permissions:
   id-token: write
 
 concurrency:
-  group: github-pages-index
+  group: github-pages
   cancel-in-progress: false
 
 jobs:
-  refresh:
+  build:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -66,6 +66,13 @@ jobs:
         with:
           path: dist
 
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - name: Deploy updated site
         id: deployment
         uses: actions/deploy-pages@v4
