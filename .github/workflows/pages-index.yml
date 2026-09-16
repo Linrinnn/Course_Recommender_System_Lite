@@ -1,0 +1,71 @@
+name: Refresh GitHub Pages course index
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: '本次補索引課程數'
+        required: false
+        default: '400'
+  schedule:
+    - cron: '17 20 * * *'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages-index
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Restore course detail cache
+        uses: actions/cache/restore@v4
+        with:
+          path: data_runtime
+          key: fju-pages-115-1-${{ github.run_id }}
+          restore-keys: |
+            fju-pages-115-1-
+
+      - name: Build next course detail batch
+        env:
+          INDEX_LIMIT: ${{ github.event.inputs.limit || '400' }}
+        run: python build_catalog.py --limit "$INDEX_LIMIT" --concurrency 4
+
+      - name: Save updated course detail cache
+        uses: actions/cache/save@v4
+        with:
+          path: data_runtime
+          key: fju-pages-115-1-${{ github.run_id }}
+
+      - name: Build updated static Pages site
+        run: python build_pages.py
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist
+
+      - name: Deploy updated site
+        id: deployment
+        uses: actions/deploy-pages@v4
