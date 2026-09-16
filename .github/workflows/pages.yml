@@ -7,12 +7,9 @@ on:
       - 'static/**'
       - 'catalog.py'
       - 'app.py'
-      - 'build_catalog.py'
       - 'build_pages.py'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
-  schedule:
-    - cron: '17 20 * * 0'
 
 permissions:
   contents: read
@@ -21,12 +18,12 @@ permissions:
 
 concurrency:
   group: github-pages
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -40,16 +37,13 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Restore course detail cache
-        uses: actions/cache@v4
+      - name: Restore available course detail cache
+        uses: actions/cache/restore@v4
         with:
           path: data_runtime
-          key: fju-pages-115-1-${{ github.run_id }}
+          key: fju-pages-115-1-latest
           restore-keys: |
             fju-pages-115-1-
-
-      - name: Build or resume full course index
-        run: python build_catalog.py --concurrency 4
 
       - name: Build static Pages site
         run: python build_pages.py
