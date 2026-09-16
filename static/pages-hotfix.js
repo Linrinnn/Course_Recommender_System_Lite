@@ -17,7 +17,9 @@
     if (path === '/api/courses') {
       if (!url.searchParams.has('min_credits')) url.searchParams.set('min_credits', 'NaN');
       if (!url.searchParams.has('max_credits')) url.searchParams.set('max_credits', 'NaN');
-      return upstreamFetch(url, init);
+      // Pass a string because the current Pages API shim reads string/Request
+      // inputs, not URL objects.
+      return upstreamFetch(url.href, init);
     }
 
     return upstreamFetch(input, init);
