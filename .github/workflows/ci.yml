@@ -23,7 +23,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Compile Python
-        run: python -m py_compile app.py catalog.py build_catalog.py
+        run: python -m py_compile app.py catalog.py build_catalog.py build_pages.py
 
       - name: Run unit tests
         run: python -m unittest discover -s tests -v
@@ -37,3 +37,4 @@ jobs:
           node --check static/app.js
           node --check static/schedule.js
           node --check static/schedule-modal.js
+          node --check static/pages-api.js
