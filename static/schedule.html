@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>輔大課表 Lite+</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <main class="shell schedule-shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">FJU Course Recommender Lite+</p>
+        <h1>獨立課表</h1>
+        <p class="muted">點任何節次，可直接搜尋該星期＋節次的課程。</p>
+      </div>
+      <div class="hero-actions">
+        <button id="backToSearchBtn" class="secondary">回到課程搜尋</button>
+      </div>
+    </header>
+
+    <section class="panel schedule-control-panel">
+      <div class="schedule-plan-toolbar">
+        <select id="planSelect" aria-label="課表方案"></select>
+        <button id="addPlanBtn" class="secondary">新增方案</button>
+        <button id="renamePlanBtn" class="secondary">重新命名</button>
+        <button id="deletePlanBtn" class="secondary danger">刪除方案</button>
+      </div>
+      <div class="schedule-summary-row">
+        <div>
+          <strong id="planSummary">0 門｜0 學分</strong>
+          <span id="termText" class="muted small"></span>
+        </div>
+        <div class="schedule-actions">
+          <button id="clearPlanBtn" class="secondary danger">清空目前方案</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel timetable-panel">
+      <div class="section-head wrap">
+        <div>
+          <h2>週課表</h2>
+          <p class="muted small">空白格與已有課程的格子都可以點擊搜尋該節次。</p>
+        </div>
+      </div>
+      <div id="timetableWrap" class="timetable-wrap"></div>
+    </section>
+
+    <section id="slotSearchPanel" class="panel slot-search-panel hidden">
+      <div class="slot-toolbar">
+        <div>
+          <h2 id="slotTitle">節次搜尋</h2>
+          <p id="slotSubtitle" class="muted small"></p>
+        </div>
+        <div class="toolbar-actions">
+          <button id="openInSearchBtn" class="secondary">在搜尋頁開啟</button>
+          <button id="closeSlotBtn" class="secondary">關閉</button>
+        </div>
+      </div>
+      <div class="search-primary">
+        <label class="field slot-keyword">
+          <span>在此節次內再搜尋</span>
+          <input id="slotKeyword" type="search" placeholder="課名、老師、課號、系所" />
+        </label>
+        <button id="slotSearchBtn">搜尋</button>
+      </div>
+      <div id="slotStatus" class="status hidden"></div>
+      <div id="slotResults" class="course-list"></div>
+      <div class="pager slot-pager">
+        <button id="slotPrevBtn" class="secondary">上一頁</button>
+        <span id="slotPageText" class="muted small"></span>
+        <button id="slotNextBtn" class="secondary">下一頁</button>
+      </div>
+    </section>
+  </main>
+
+  <template id="slotCourseTemplate">
+    <article class="course-card slot-course-card">
+      <div class="course-main">
+        <div class="title-row">
+          <h3 class="course-name"></h3>
+          <span class="badge req-badge"></span>
+        </div>
+        <p class="course-meta"></p>
+        <p class="meeting-text"></p>
+        <p class="conflict-note hidden"></p>
+      </div>
+      <div class="course-actions">
+        <a class="outline-link" target="_blank" rel="noopener">官方課綱</a>
+        <button class="add-btn">加入課表</button>
+      </div>
+    </article>
+  </template>
+
+  <script type="module" src="/static/schedule.js"></script>
+</body>
+</html>

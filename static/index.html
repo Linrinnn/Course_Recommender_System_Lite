@@ -3,71 +3,135 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>輔大課程查找 Lite</title>
+  <title>輔大課程搜尋 Lite+</title>
   <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
   <main class="shell">
     <header class="hero">
       <div>
-        <p class="eyebrow">FJU Course Recommender Lite</p>
-        <h1>輔大課程查找</h1>
+        <p class="eyebrow">FJU Course Recommender Lite+</p>
+        <h1>課程搜尋</h1>
         <p id="termText" class="muted">讀取學期資料中…</p>
       </div>
-      <button id="refreshBtn" class="secondary">重新抓取課程</button>
+      <div class="hero-actions">
+        <button id="openScheduleBtn" class="secondary">開啟獨立課表 <span id="scheduleCount">0</span></button>
+        <button id="refreshBtn" class="secondary">更新課程資料</button>
+      </div>
     </header>
 
-    <section class="panel controls">
-      <input id="searchInput" type="search" placeholder="搜尋課名、教師、課號、系所" autocomplete="off" />
-      <select id="weekdaySelect">
-        <option value="">全部星期</option>
-        <option value="1">星期一</option><option value="2">星期二</option><option value="3">星期三</option>
-        <option value="4">星期四</option><option value="5">星期五</option><option value="6">星期六</option><option value="7">星期日</option>
-      </select>
-      <select id="reqSelect">
-        <option value="">必修＋選修</option>
-        <option value="必">只看必修</option>
-        <option value="選">只看選修</option>
-      </select>
-      <button id="searchBtn">搜尋</button>
+    <section class="panel index-panel">
+      <div class="index-status-row">
+        <div>
+          <strong>完整搜尋索引</strong>
+          <p id="indexStatusText" class="muted small">讀取中…</p>
+        </div>
+        <button id="buildIndexBtn" class="secondary">建立／續跑完整索引</button>
+      </div>
+      <div class="progress-track" aria-hidden="true"><div id="indexProgressBar" class="progress-value"></div></div>
+      <p class="muted small index-note">基本課名、教師、系所、星期與節次不用完整索引。授課語言、教材語言、教學／評量方式、線上教學、課程能力與課程大綱內容需要完整索引。</p>
     </section>
 
-    <section class="layout">
-      <div>
-        <div class="section-head">
-          <h2>課程</h2>
-          <span id="resultCount" class="muted"></span>
-        </div>
-        <div id="status" class="status">載入中…</div>
-        <div id="courseList" class="course-list"></div>
+    <section class="panel search-panel">
+      <div class="search-primary">
+        <label class="field search-field">
+          <span>搜尋課程</span>
+          <input id="searchInput" type="search" placeholder="課名、課號、教師、系所、課程目標、每週進度、教材…" autocomplete="off" />
+        </label>
+        <button id="searchBtn">搜尋</button>
       </div>
 
-      <aside class="panel schedule-panel">
-        <div class="section-head">
-          <h2>我的暫存課表</h2>
-          <button id="clearBtn" class="text-btn">清空</button>
+      <div class="quick-filter-grid">
+        <label class="field"><span>系所</span><select id="departmentSelect"><option value="">全部系所</option></select></label>
+        <label class="field"><span>星期</span><select id="weekdaySelect">
+          <option value="">全部星期</option><option value="1">星期一</option><option value="2">星期二</option><option value="3">星期三</option>
+          <option value="4">星期四</option><option value="5">星期五</option><option value="6">星期六</option><option value="7">星期日</option>
+        </select></label>
+        <label class="field"><span>節次</span><select id="sectionSelect"><option value="">全部節次</option></select></label>
+        <label class="field"><span>學分</span><select id="creditsSelect"><option value="">不限學分</option></select></label>
+        <label class="field"><span>必／選修</span><select id="reqSelect"><option value="">全部</option></select></label>
+      </div>
+
+      <details class="advanced-filter" id="advancedFilters">
+        <summary>更多篩選條件 <span id="advancedCount" class="badge neutral-badge">0</span></summary>
+
+        <div class="filter-group">
+          <h3>基本條件</h3>
+          <div class="filter-grid advanced-grid">
+            <label class="field"><span>開課部別</span><select id="divisionSelect"><option value="">全部部別</option></select></label>
+            <label class="field"><span>年級</span><select id="gradeSelect"><option value="">全部年級</option></select></label>
+            <label class="field"><span>修課層級</span><select id="studyLevelSelect"><option value="">全部層級</option></select></label>
+            <label class="field"><span>課程標籤</span><select id="courseTagSelect"><option value="">全部標籤</option></select></label>
+            <label class="field"><span>教師</span><input id="teacherInput" list="teacherOptions" placeholder="輸入教師姓名" /><datalist id="teacherOptions"></datalist></label>
+            <label class="field"><span>班別</span><select id="classSelect"><option value="">全部班別</option></select></label>
+            <label class="field"><span>上課時段</span><select id="timeOfDaySelect">
+              <option value="all">不限</option><option value="daytime">日間 D 節</option><option value="evening">晚間 E 節</option><option value="weekday_evening_or_saturday">平日晚間＋週六</option>
+            </select></label>
+            <label class="field"><span>時間資料</span><select id="scheduleSelect"><option value="all">全部</option><option value="known">只看有上課時間</option><option value="unknown">只看時間未定</option></select></label>
+          </div>
+          <div class="exact-section-block"><div class="filter-label-row"><strong>精確節次</strong><span class="muted small">可複選，符合其中任一節次</span></div><div id="sectionChips" class="chip-grid"></div></div>
         </div>
-        <p class="muted small">資料只存在此瀏覽器，加入課程時會檢查相同星期與節次。</p>
-        <div id="conflictBox" class="conflict-box hidden"></div>
-        <div id="selectedList" class="selected-list"></div>
-      </aside>
+
+        <div class="filter-group enriched-filter-group">
+          <div class="filter-label-row"><h3>原專案進階欄位</h3><span id="enrichedCoverageText" class="muted small"></span></div>
+          <div class="filter-grid advanced-grid">
+            <label class="field enriched-field"><span>授課語言</span><select id="teachingLanguageSelect"><option value="">全部</option></select></label>
+            <label class="field enriched-field"><span>教材語言</span><select id="materialLanguageSelect"><option value="">全部</option></select></label>
+            <label class="field enriched-field"><span>教學方式</span><select id="teachingMethodSelect"><option value="">全部</option></select></label>
+            <label class="field enriched-field"><span>評量方式</span><select id="assessmentSelect"><option value="">全部</option></select></label>
+            <label class="field enriched-field"><span>評量類型</span><select id="assessmentStyleSelect">
+              <option value="all">不限</option><option value="no_exams">無考試</option><option value="exam">考試為主</option><option value="writing">書面為主</option><option value="presentation">報告為主</option><option value="practical">實作為主</option><option value="participation">參與為主</option>
+            </select></label>
+            <label class="field enriched-field"><span>線上教學</span><select id="onlineTeachingSelect">
+              <option value="all">不限</option><option value="physical_only">純實體</option><option value="has_online">含線上</option><option value="sync">同步線上</option><option value="async">非同步線上</option><option value="both">同步＋非同步</option>
+            </select></label>
+            <label class="field enriched-field"><span>課程能力／議題</span><select id="relationSelect"><option value="">全部</option></select></label>
+            <label class="field enriched-field"><span>先修關鍵字</span><input id="prerequisiteInput" placeholder="例如：程式設計、微積分" /></label>
+            <label class="field"><span>索引狀態</span><select id="detailIndexedSelect"><option value="all">全部課程</option><option value="yes">只看完整索引</option><option value="no">只看尚未索引</option></select></label>
+            <label class="field"><span>排序</span><select id="sortSelect"><option value="relevance">相關度</option><option value="name">課名</option><option value="department">系所</option><option value="grade">年級</option><option value="teacher">教師</option><option value="credits">學分</option><option value="course_code">課號</option></select></label>
+          </div>
+          <div class="criterion-row">
+            <label class="field"><span>教學方式判定</span><select id="teachingMethodCriterionSelect"><option value="dominant">主要方式</option><option value="minimum">至少達比例</option></select></label>
+            <label class="field"><span>最低比例</span><input id="teachingMethodMinInput" type="number" min="0" max="100" value="20" /></label>
+            <label class="field"><span>評量方式判定</span><select id="assessmentCriterionSelect"><option value="dominant">主要方式</option><option value="minimum">至少達比例</option></select></label>
+            <label class="field"><span>最低比例</span><input id="assessmentMinInput" type="number" min="0" max="100" value="20" /></label>
+          </div>
+        </div>
+      </details>
+
+      <div class="toolbar search-toolbar">
+        <div id="activeFilterText" class="muted small">未套用額外條件</div>
+        <div class="toolbar-actions"><button id="resetFiltersBtn" class="secondary">清除條件</button><button id="applyFiltersBtn">套用篩選</button></div>
+      </div>
+    </section>
+
+    <section class="results-column">
+      <div class="section-head wrap">
+        <div><h2>搜尋結果</h2><span id="resultCount" class="muted"></span></div>
+        <div class="pager"><button id="prevPageBtn" class="secondary">上一頁</button><span id="pageText" class="muted small"></span><button id="nextPageBtn" class="secondary">下一頁</button></div>
+      </div>
+      <div id="status" class="status">載入中…</div>
+      <div id="courseList" class="course-list"></div>
     </section>
   </main>
+
+  <dialog id="detailDialog" class="detail-dialog">
+    <div class="detail-dialog-inner">
+      <div class="section-head"><h2 id="detailTitle">課程完整資料</h2><button id="closeDetailBtn" class="secondary">關閉</button></div>
+      <div id="detailContent" class="detail-content"></div>
+    </div>
+  </dialog>
 
   <template id="courseTemplate">
     <article class="course-card">
       <div class="course-main">
-        <div class="title-row">
-          <h3 class="course-name"></h3>
-          <span class="badge req-badge"></span>
-        </div>
+        <div class="title-row"><h3 class="course-name"></h3><span class="badge req-badge"></span><span class="badge index-badge"></span></div>
+        <p class="course-name-en muted small"></p>
         <p class="course-meta"></p>
         <p class="meeting-text"></p>
+        <div class="course-tags"></div>
       </div>
-      <div class="course-actions">
-        <a class="outline-link" target="_blank" rel="noopener">大綱</a>
-        <button class="add-btn">加入課表</button>
-      </div>
+      <div class="course-actions"><a class="outline-link" target="_blank" rel="noopener">官方課綱</a><button class="detail-btn secondary">完整資料</button><button class="add-btn">加入課表</button></div>
     </article>
   </template>
 
