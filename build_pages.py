@@ -46,7 +46,10 @@ def build_facets(courses: list[dict]) -> dict:
         "credits": _numeric_options([course.get("credits_number") for course in courses], " 學分"),
         "classes": counted_options(course.get("class_group") for course in courses),
         "divisions": counted_options(course.get("division") for course in courses),
-        "study_levels": counted_options(course.get("study_level") for course in courses),
+        "study_levels": [
+            item for item in counted_options(course.get("study_level") for course in courses)
+            if item.get("value") not in {"", "unknown"}
+        ],
         "required_elective": counted_options(course.get("required_elective") for course in courses),
         "course_tags": _tag_options(courses),
         "teachers": counted_options(course.get("teacher") for course in courses),
@@ -77,14 +80,15 @@ def rewrite_html(source: str, *, schedule: bool = False) -> str:
     value = source.replace('href="/static/', 'href="./static/').replace('src="/static/', 'src="./static/')
     loaders = (
         '<script src="./static/department-fix.js"></script>\n'
-        '  <script src="./static/pages-api.js"></script>'
+        '  <script src="./static/pages-api.js"></script>\n'
+        '  <script src="./static/pages-hotfix.js"></script>'
     )
     marker = (
         '<script type="module" src="./static/schedule.js"></script>'
         if schedule
         else '<script src="./static/schedule-modal.js"></script>'
     )
-    if '<script src="./static/department-fix.js"></script>' not in value:
+    if '<script src="./static/pages-hotfix.js"></script>' not in value:
         value = value.replace(marker, f'{loaders}\n  {marker}')
     return value
 
@@ -136,6 +140,7 @@ async def main() -> None:
         "course_count": len(courses),
         "detail_indexed": indexed,
         "detail_index_complete": bool(courses) and indexed == len(courses),
+        "pages_mode": True,
         "pages_generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
     payload = {
