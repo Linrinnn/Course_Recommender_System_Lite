@@ -75,14 +75,14 @@ def build_facets(courses: list[dict]) -> dict:
 
 def rewrite_html(source: str, *, schedule: bool = False) -> str:
     value = source.replace('href="/static/', 'href="./static/').replace('src="/static/', 'src="./static/')
-    loader = '  <script src="./static/pages-api.js"></script>\n'
+    loader = '<script src="./static/pages-api.js"></script>'
     marker = (
-        '  <script type="module" src="./static/schedule.js"></script>'
+        '<script type="module" src="./static/schedule.js"></script>'
         if schedule
-        else '  <script src="./static/schedule-modal.js"></script>'
+        else '<script src="./static/schedule-modal.js"></script>'
     )
-    if loader.strip() not in value:
-        value = value.replace(marker, loader + marker)
+    if loader not in value:
+        value = value.replace(marker, f'{loader}\n  {marker}')
     return value
 
 
