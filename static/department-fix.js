@@ -12,10 +12,12 @@
     if (/^[A-Z0-9]{2}$/.test(code)) return code;
 
     const courseCode = clean(course.course_code).toUpperCase();
-    const parts = courseCode.split('-');
-    if (parts.length >= 2 && /^[A-Z0-9]{4,}$/.test(parts[1])) {
-      return parts[1].slice(0, 2);
-    }
+    const dashed = courseCode.match(/^[A-Z]+-([A-Z0-9]{2})/);
+    if (dashed) return dashed[1];
+
+    // Current FJU API may return compact codes such as DAT1100009.
+    // When the department code is absent, keep the department name rather
+    // than guessing from a compact code with an unclear prefix layout.
     return '';
   }
 
@@ -51,10 +53,9 @@
       const code = departmentCode(course);
       const originalName = departmentName(course);
       if (!code) {
-        const fallback = originalName;
         course.department_name = originalName;
-        course.department = fallback;
-        optionCounts.set(fallback, (optionCounts.get(fallback) || 0) + 1);
+        course.department = originalName;
+        optionCounts.set(originalName, (optionCounts.get(originalName) || 0) + 1);
         continue;
       }
 
@@ -81,10 +82,16 @@
     return payload;
   }
 
+  function inputUrl(input) {
+    if (input instanceof URL) return input.href;
+    if (typeof input === 'string') return new URL(input, location.href).href;
+    if (input?.url) return new URL(input.url, location.href).href;
+    return '';
+  }
+
   window.fetch = async (input, init) => {
-    const raw = typeof input === 'string' ? input : input?.url;
-    const url = new URL(raw, location.href);
-    if (url.href !== catalogUrl) return upstreamFetch(input, init);
+    const href = inputUrl(input);
+    if (href !== catalogUrl) return upstreamFetch(input, init);
 
     const response = await upstreamFetch(input, init);
     if (!response.ok) return response;
