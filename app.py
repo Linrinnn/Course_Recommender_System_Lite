@@ -71,13 +71,23 @@ def _enriched_mtime() -> float | None:
 async def _load_courses(force: bool = False) -> list[dict[str, Any]]:
     now = time.monotonic()
     mtime = _enriched_mtime()
-    if not force and _cache["courses"] and now - _cache["at"] < CACHE_SECONDS and _cache["enriched_mtime"] == mtime:
+    if (
+        not force
+        and _cache["courses"]
+        and now - _cache["at"] < CACHE_SECONDS
+        and _cache["enriched_mtime"] == mtime
+    ):
         return _cache["courses"]
 
     async with _cache_lock:
         now = time.monotonic()
         mtime = _enriched_mtime()
-        if not force and _cache["courses"] and now - _cache["at"] < CACHE_SECONDS and _cache["enriched_mtime"] == mtime:
+        if (
+            not force
+            and _cache["courses"]
+            and now - _cache["at"] < CACHE_SECONDS
+            and _cache["enriched_mtime"] == mtime
+        ):
             return _cache["courses"]
         try:
             basic = await fetch_list_catalog()
@@ -91,7 +101,12 @@ async def _load_courses(force: bool = False) -> list[dict[str, Any]]:
 
 
 def _section_options(courses: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    counter = Counter(section for course in courses for meeting in course.get("meetings") or [] for section in meeting.get("sections") or [])
+    counter = Counter(
+        section
+        for course in courses
+        for meeting in course.get("meetings") or []
+        for section in meeting.get("sections") or []
+    )
     return [{"value": section, "label": section, "count": counter.get(section, 0)} for section in OFFICIAL_SECTIONS]
 
 
@@ -100,7 +115,10 @@ def _tag_options(courses: list[dict[str, Any]]) -> list[dict[str, Any]]:
     for course in courses:
         for tag in course.get("course_tags") or []:
             counter[(str(tag.get("code")), str(tag.get("label") or tag.get("code")))] += 1
-    return [{"value": code, "label": label, "count": count} for (code, label), count in sorted(counter.items(), key=lambda pair: pair[0][1])]
+    return [
+        {"value": code, "label": label, "count": count}
+        for (code, label), count in sorted(counter.items(), key=lambda pair: pair[0][1])
+    ]
 
 
 def _numeric_options(values: list[Any], suffix: str) -> list[dict[str, Any]]:
@@ -111,7 +129,10 @@ def _numeric_options(values: list[Any], suffix: str) -> list[dict[str, Any]]:
                 counter[float(value)] += 1
         except (TypeError, ValueError):
             pass
-    return [{"value": f"{value:g}", "label": f"{value:g}{suffix}", "count": counter[value]} for value in sorted(counter)]
+    return [
+        {"value": f"{value:g}", "label": f"{value:g}{suffix}", "count": counter[value]}
+        for value in sorted(counter)
+    ]
 
 
 def _instructor_options(courses: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -122,7 +143,10 @@ def _instructor_options(courses: list[dict[str, Any]]) -> list[dict[str, Any]]:
             label = str(item.get("name_zh") or item.get("name_en") or ident)
             if ident:
                 counter[(ident, label)] += 1
-    return [{"value": ident, "label": label, "count": count} for (ident, label), count in sorted(counter.items(), key=lambda row: row[0][1])]
+    return [
+        {"value": ident, "label": label, "count": count}
+        for (ident, label), count in sorted(counter.items(), key=lambda row: row[0][1])
+    ]
 
 
 def _facet_coverage(courses: list[dict[str, Any]], field: str) -> dict[str, int]:
@@ -143,7 +167,11 @@ def _matches_time_of_day(course: dict[str, Any], mode: str, include_unknown: boo
     if mode == "evening":
         return bool(sections & EVENING_SECTIONS)
     if mode == "weekday_evening_or_saturday":
-        return any(meeting.get("weekday") == 6 or bool(set(meeting.get("sections") or []) & EVENING_SECTIONS) for meeting in meetings)
+        return any(
+            meeting.get("weekday") == 6
+            or bool(set(meeting.get("sections") or []) & EVENING_SECTIONS)
+            for meeting in meetings
+        )
     return True
 
 
@@ -201,7 +229,19 @@ async def facets() -> dict[str, Any]:
         "teaching_methods": weighted_options(courses, "teaching_methods"),
         "assessments": weighted_options(courses, "assessments"),
         "relations": relation_options(courses),
-        "coverage": {field: _facet_coverage(courses, field) for field in ("teaching_language", "material_language", "teaching_methods", "assessments", "relations", "online_teaching", "prerequisite", "objective")},
+        "coverage": {
+            field: _facet_coverage(courses, field)
+            for field in (
+                "teaching_language",
+                "material_language",
+                "teaching_methods",
+                "assessments",
+                "relations",
+                "online_teaching",
+                "prerequisite",
+                "objective",
+            )
+        },
     }
 
 
@@ -233,7 +273,9 @@ async def courses(
     assessment: str = Query("", max_length=400),
     assessment_criterion: str = Query("dominant", pattern="^(dominant|minimum)$"),
     assessment_min: float = Query(20, ge=0, le=100),
-    assessment_style: str = Query("all", pattern="^(all|no_exams|exam|writing|presentation|practical|participation)$"),
+    assessment_style: str = Query(
+        "all", pattern="^(all|no_exams|exam|writing|presentation|practical|participation)$"
+    ),
     online_teaching: str = Query("all", pattern="^(all|physical_only|has_online|sync|async|both)$"),
     relation: str = Query("", max_length=400),
     include_indirect_relations: bool = Query(True),
@@ -267,11 +309,15 @@ async def courses(
             continue
         if required_elective and course.get("required_elective", "").casefold() != required_elective.casefold():
             continue
-        if selected_tags and not selected_tags.intersection(str(tag.get("code")) for tag in course.get("course_tags") or []):
+        if selected_tags and not selected_tags.intersection(
+            str(tag.get("code")) for tag in course.get("course_tags") or []
+        ):
             continue
         if teacher and teacher.casefold() not in course.get("teacher", "").casefold():
             continue
-        if selected_instructors and not selected_instructors.intersection(str(item.get("id")) for item in course.get("instructors") or []):
+        if selected_instructors and not selected_instructors.intersection(
+            str(item.get("id")) for item in course.get("instructors") or []
+        ):
             continue
         if class_group and class_group.casefold() not in course.get("class_group", "").casefold():
             continue
@@ -299,16 +345,32 @@ async def courses(
             continue
         if material_language and course.get("material_language") != material_language:
             continue
-        if not matches_weighted(course, "teaching_methods", selected_methods, teaching_method_criterion, teaching_method_min):
+        if not matches_weighted(
+            course,
+            "teaching_methods",
+            selected_methods,
+            teaching_method_criterion,
+            teaching_method_min,
+        ):
             continue
-        if not matches_weighted(course, "assessments", selected_assessments, assessment_criterion, assessment_min):
+        if not matches_weighted(
+            course,
+            "assessments",
+            selected_assessments,
+            assessment_criterion,
+            assessment_min,
+        ):
             continue
         if not matches_assessment_style(course, assessment_style):
             continue
         if not matches_online(course, online_teaching):
             continue
         if selected_relations:
-            actual_relations = {str(item.get("id")) for item in course.get("relations") or [] if include_indirect_relations or item.get("strength") == "direct"}
+            actual_relations = {
+                str(item.get("id"))
+                for item in course.get("relations") or []
+                if include_indirect_relations or item.get("strength") == "direct"
+            }
             if not selected_relations.intersection(actual_relations):
                 continue
         if prerequisite and prerequisite.casefold() not in course.get("prerequisite", "").casefold():
@@ -324,11 +386,31 @@ async def courses(
     else:
         sort_map = {
             "name": lambda course: (course.get("name", "").casefold(), course.get("course_code", "")),
-            "department": lambda course: (not bool(course.get("department")), course.get("department", "").casefold(), course.get("name", "").casefold()),
-            "grade": lambda course: (course.get("grade") is None, course.get("grade") or 99, course.get("name", "").casefold()),
-            "teacher": lambda course: (not bool(course.get("teacher")), course.get("teacher", "").casefold(), course.get("name", "").casefold()),
-            "credits": lambda course: (course.get("credits_number") is None, course.get("credits_number") or 0, course.get("name", "").casefold()),
-            "course_code": lambda course: (not bool(course.get("course_code")), course.get("course_code", ""), course.get("name", "").casefold()),
+            "department": lambda course: (
+                not bool(course.get("department")),
+                course.get("department", "").casefold(),
+                course.get("name", "").casefold(),
+            ),
+            "grade": lambda course: (
+                course.get("grade") is None,
+                course.get("grade") or 99,
+                course.get("name", "").casefold(),
+            ),
+            "teacher": lambda course: (
+                not bool(course.get("teacher")),
+                course.get("teacher", "").casefold(),
+                course.get("name", "").casefold(),
+            ),
+            "credits": lambda course: (
+                course.get("credits_number") is None,
+                course.get("credits_number") or 0,
+                course.get("name", "").casefold(),
+            ),
+            "course_code": lambda course: (
+                not bool(course.get("course_code")),
+                course.get("course_code", ""),
+                course.get("name", "").casefold(),
+            ),
             "relevance": lambda course: (course.get("name", "").casefold(),),
         }
         scored.sort(key=lambda pair: sort_map[sort](pair[1]))
@@ -338,13 +420,21 @@ async def courses(
     page = min(page, total_pages)
     start = (page - 1) * page_size
     page_rows = []
-    for score, course in scored[start:start + page_size]:
+    for score, course in scored[start : start + page_size]:
         item = dict(course)
         item.pop("raw_list", None)
         if query:
             item["search_score"] = round(score, 3)
         page_rows.append(item)
-    return {"items": page_rows, "total": total, "page": page, "page_size": page_size, "total_pages": total_pages, "academic_year": HY, "semester": HT}
+    return {
+        "items": page_rows,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages,
+        "academic_year": HY,
+        "semester": HT,
+    }
 
 
 @app.get("/api/course/{course_id}")
@@ -375,7 +465,18 @@ async def _run_full_index() -> None:
             basic = await fetch_list_catalog()
             existing = load_enriched_map()
             pending = [course for course in basic if course["id"] not in existing]
-            _index_state.update({"running": True, "total": len(basic), "completed": len(existing), "failed": 0, "current": "", "started_at": int(time.time()), "finished_at": None, "last_error": ""})
+            _index_state.update(
+                {
+                    "running": True,
+                    "total": len(basic),
+                    "completed": len(existing),
+                    "failed": 0,
+                    "current": "",
+                    "started_at": int(time.time()),
+                    "finished_at": None,
+                    "last_error": "",
+                }
+            )
             semaphore = asyncio.Semaphore(DETAIL_CONCURRENCY)
             write_lock = asyncio.Lock()
 
@@ -407,9 +508,14 @@ async def _run_full_index() -> None:
 
 @app.get("/api/index/status")
 async def index_status() -> dict[str, Any]:
+    state = dict(_index_state)
+    if state.get("running"):
+        state["catalog_total"] = state.get("total", 0)
+        state["catalog_indexed"] = state.get("completed", 0)
+        state["complete"] = False
+        return state
     items = await _load_courses()
     indexed = sum(1 for course in items if course.get("detail_indexed"))
-    state = dict(_index_state)
     state["catalog_total"] = len(items)
     state["catalog_indexed"] = indexed
     state["complete"] = bool(items) and indexed == len(items)
@@ -429,4 +535,8 @@ async def start_index() -> dict[str, Any]:
 @app.post("/api/refresh")
 async def refresh() -> dict[str, Any]:
     items = await _load_courses(force=True)
-    return {"ok": True, "course_count": len(items), "detail_indexed": sum(1 for item in items if item.get("detail_indexed"))}
+    return {
+        "ok": True,
+        "course_count": len(items),
+        "detail_indexed": sum(1 for item in items if item.get("detail_indexed")),
+    }
