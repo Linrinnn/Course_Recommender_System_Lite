@@ -50,12 +50,17 @@
 GitHub Actions
    │
    ├─ 讀取輔大公開課程 API
-   ├─ 建立／續跑完整課綱索引
    ├─ 產生 dist/data/catalog.json
    └─ 部署到 GitHub Pages
           │
           ▼
 瀏覽器直接搜尋、篩選、排課
+
+每日索引工作
+   │
+   ├─ 從快取續跑詳細課綱索引
+   ├─ 每次補一批進階資料
+   └─ 重新部署更新後的網站
 ```
 
 Pages 版使用 `static/pages-api.js` 在瀏覽器端提供與 FastAPI 相容的查詢介面，因此主搜尋、進階篩選、浮動課表與節次找課可以沿用同一套前端。
@@ -66,7 +71,11 @@ Pages 版使用 `static/pages-api.js` 在瀏覽器端提供與 FastAPI 相容的
 Settings → Pages → Build and deployment → Source → GitHub Actions
 ```
 
-之後 `.github/workflows/pages.yml` 會在 `main` 更新時部署，也可從 Actions 手動執行；另外每週會自動更新一次課程快照。完整索引資料透過 GitHub Actions cache 續跑，避免每次從零開始。
+之後：
+
+- `.github/workflows/pages.yml` 負責快速部署基本可用網站，不必等完整課綱索引。
+- `.github/workflows/pages-index.yml` 每天自動從 GitHub Actions cache 續跑一批詳細課綱索引，再重新部署。
+- 兩個 workflow 都可在 Actions 頁面手動執行；索引 workflow 可自行指定本次要補多少門課。
 
 預設網址會是：
 
