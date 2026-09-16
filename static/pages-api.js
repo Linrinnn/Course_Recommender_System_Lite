@@ -35,6 +35,7 @@
   }
 
   function n(value) {
+    if (value === null || value === undefined || value === '') return null;
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : null;
   }
@@ -54,7 +55,7 @@
       [1.1, (course.relations || []).map((x) => x.label || '').join(' ')],
       [1, (course.teaching_methods || []).map((x) => x.label || '').join(' ')],
       [1, (course.assessments || []).map((x) => x.label || '').join(' ')],
-      [1, `${course.department || ''} ${course.division || ''} ${course.class_group || ''}`],
+      [1, `${course.department_code || ''} ${course.department || ''} ${course.division || ''} ${course.class_group || ''}`],
       [0.8, (course.course_tags || []).map((x) => x.label || '').join(' ')],
     ];
     const full = text(fields.map(([, v]) => v).join(' '));
@@ -170,7 +171,11 @@
     for (const course of courses) {
       const score = q ? tokenScore(course, q) : 0;
       if (q && score <= 0) continue;
-      if (department && text(course.department) !== department) continue;
+      if (
+        department
+        && text(course.department_code) !== department
+        && text(course.department) !== department
+      ) continue;
       if (grade && course.grade !== grade) continue;
       if (division && text(course.division) !== division) continue;
       if (studyLevel && course.study_level !== studyLevel) continue;
@@ -226,7 +231,8 @@
   }
 
   window.fetch = async (input, init) => {
-    const raw = typeof input === 'string' ? input : input?.url;
+    const raw = input instanceof URL ? input.href : (typeof input === 'string' ? input : input?.url);
+    if (!raw) return nativeFetch(input, init);
     const url = new URL(raw, location.href);
     const path = apiPath(url);
     if (!path) return nativeFetch(input, init);
