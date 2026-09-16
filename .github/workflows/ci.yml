@@ -36,3 +36,4 @@ jobs:
         run: |
           node --check static/app.js
           node --check static/schedule.js
+          node --check static/schedule-modal.js
