@@ -511,6 +511,8 @@ def matches_weighted(course: dict[str, Any], field: str, selected: set[str], cri
 def matches_assessment_style(course: dict[str, Any], style: str) -> bool:
     if style == "all":
         return True
+    if not course.get("detail_indexed"):
+        return False
     values = {str(item.get("id")): (_number(item.get("percent")) or 0) for item in course.get("assessments") or []}
     if style == "no_exams":
         return sum(values.get(item, 0) for item in ASSESSMENT_FAMILIES["exam"]) == 0
