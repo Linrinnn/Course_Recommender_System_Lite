@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>輔大課程查找 Lite</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">FJU Course Recommender Lite</p>
+        <h1>輔大課程查找</h1>
+        <p id="termText" class="muted">讀取學期資料中…</p>
+      </div>
+      <button id="refreshBtn" class="secondary">重新抓取課程</button>
+    </header>
+
+    <section class="panel controls">
+      <input id="searchInput" type="search" placeholder="搜尋課名、教師、課號、系所" autocomplete="off" />
+      <select id="weekdaySelect">
+        <option value="">全部星期</option>
+        <option value="1">星期一</option><option value="2">星期二</option><option value="3">星期三</option>
+        <option value="4">星期四</option><option value="5">星期五</option><option value="6">星期六</option><option value="7">星期日</option>
+      </select>
+      <select id="reqSelect">
+        <option value="">必修＋選修</option>
+        <option value="必">只看必修</option>
+        <option value="選">只看選修</option>
+      </select>
+      <button id="searchBtn">搜尋</button>
+    </section>
+
+    <section class="layout">
+      <div>
+        <div class="section-head">
+          <h2>課程</h2>
+          <span id="resultCount" class="muted"></span>
+        </div>
+        <div id="status" class="status">載入中…</div>
+        <div id="courseList" class="course-list"></div>
+      </div>
+
+      <aside class="panel schedule-panel">
+        <div class="section-head">
+          <h2>我的暫存課表</h2>
+          <button id="clearBtn" class="text-btn">清空</button>
+        </div>
+        <p class="muted small">資料只存在此瀏覽器，加入課程時會檢查相同星期與節次。</p>
+        <div id="conflictBox" class="conflict-box hidden"></div>
+        <div id="selectedList" class="selected-list"></div>
+      </aside>
+    </section>
+  </main>
+
+  <template id="courseTemplate">
+    <article class="course-card">
+      <div class="course-main">
+        <div class="title-row">
+          <h3 class="course-name"></h3>
+          <span class="badge req-badge"></span>
+        </div>
+        <p class="course-meta"></p>
+        <p class="meeting-text"></p>
+      </div>
+      <div class="course-actions">
+        <a class="outline-link" target="_blank" rel="noopener">大綱</a>
+        <button class="add-btn">加入課表</button>
+      </div>
+    </article>
+  </template>
+
+  <script type="module" src="/static/app.js"></script>
+</body>
+</html>
