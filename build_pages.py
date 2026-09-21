@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import shutil
 import urllib.request
 from collections import Counter
@@ -208,7 +209,7 @@ def patch_static_js() -> None:
 
 
 async def main() -> None:
-    refresh_list = str(__import__("os").environ.get("FJU_REFRESH_LIST", "")).lower() in {"1", "true", "yes"}
+    refresh_list = str(os.environ.get("FJU_REFRESH_LIST", "")).lower() in {"1", "true", "yes"}
     basic, list_meta = await get_list_catalog(refresh=refresh_list)
     courses, _ = merge_enriched(basic)
     apply_department_reference(courses)
