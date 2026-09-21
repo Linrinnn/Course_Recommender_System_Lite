@@ -16,6 +16,12 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(course["meetings"][0]["room"], "SF123")
         self.assertEqual(course["credits_number"], 3.0)
 
+    def test_missing_chinese_name_keeps_official_row(self):
+        course = catalog.normalize_list_row({"jonCouSn": 456, "avaNO": "D010001234", "couENa": "English Only"})
+        self.assertEqual(course["id"], "456")
+        self.assertEqual(course["name"], "English Only")
+        self.assertEqual(course["name_zh"], "")
+
     def test_search_score_requires_all_query_terms(self):
         course = catalog.normalize_list_row({"jonCouSn": 1, "couCNa": "人工智慧導論", "tchCNa": "陳老師", "dptGrdCN": "資訊工程學系"})
         self.assertGreater(catalog.search_score(course, "人工智慧"), 0)
@@ -39,9 +45,9 @@ class EnrichmentTests(unittest.IsolatedAsyncioTestCase):
     async def test_enrichment_maps_original_fields(self):
         base = catalog.normalize_list_row({"jonCouSn": 99, "couCNa": "測試課", "tchCNa": "老師", "dptGrdCN": "資訊工程學系二甲"})
         responses = {
-            catalog.DETAIL_ENDPOINTS["course_details"]: {"result": {"jonCouSn": 99, "couCNa": "測試課", "tchCNa": "老師", "tchNo": "T1", "teaLangCNa": "英語", "teaMaterCNa": "英文"}},
+            catalog.DETAIL_ENDPOINTS["course_details"]: {"result": {"jonCouSn": 99, "couCNa": "測試課", "tchCNa": "老師", "tchNo": "T1", "titleCNa": "教授", "teaLangCNa": "英語", "teaMaterCNa": "英文", "isDone": True}},
             catalog.DETAIL_ENDPOINTS["relations"]: {"result": [{"coreNo": 10, "itemNo": 1, "itemName": "SDG", "relation": 3}]},
-            catalog.DETAIL_ENDPOINTS["info_and_book"]: {"result": {"obj": "學會測試", "preCourse": "程式設計", "book": "教材"}},
+            catalog.DETAIL_ENDPOINTS["info_and_book"]: {"result": {"obj": "學會測試", "preCourse": "程式設計", "book": "教材", "norms": "準時出席", "other": "其他說明", "email": "teacher@example.edu.tw", "office": "SF100", "courseOfficeHr": "週三 12:00"}},
             catalog.DETAIL_ENDPOINTS["course_progress"]: {"result": {"weeklyCP": [{"theme": "單元一", "syncOnlineClassHr": 1, "asyncOnlineClassHr": 0}]}},
             catalog.DETAIL_ENDPOINTS["methods"]: {"result": [{"mType": 1, "methodsDetails": [{"methodSN": 2, "methodName": "討論", "percent": 60}]}, {"mType": 2, "methodsDetails": [{"methodSN": 4, "methodName": "報告", "percent": 100}]}]},
             catalog.DETAIL_ENDPOINTS["tch_leaves"]: {"result": [{"cweek": 3, "note": "補課"}]},
@@ -61,6 +67,12 @@ class EnrichmentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(detail["relations"][0]["group"], "sdgs")
         self.assertEqual(detail["makeup_classes"][0]["note"], "補課")
         self.assertEqual(detail["materials"]["textbook"], "教材")
+        self.assertEqual(detail["learning_norms"], "準時出席")
+        self.assertEqual(detail["outline_notes"], "其他說明")
+        self.assertEqual(detail["teacher_contact"]["email"], "teacher@example.edu.tw")
+        self.assertEqual(detail["instructors"][0]["title_zh"], "教授")
+        self.assertTrue(detail["outline_completion"]["is_done"])
+        self.assertEqual(detail["detail_schema_version"], catalog.DETAIL_SCHEMA_VERSION)
 
 
 if __name__ == "__main__":
