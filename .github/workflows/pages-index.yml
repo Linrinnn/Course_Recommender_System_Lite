@@ -47,7 +47,7 @@ jobs:
       - name: Build next course detail batch
         env:
           INDEX_LIMIT: ${{ github.event.inputs.limit || '400' }}
-        run: python build_catalog.py --limit "$INDEX_LIMIT" --concurrency 4
+        run: python build_catalog.py --limit "$INDEX_LIMIT" --concurrency 4 --refresh-list
 
       - name: Save updated course detail cache
         uses: actions/cache/save@v4
