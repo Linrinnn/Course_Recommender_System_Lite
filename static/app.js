@@ -119,7 +119,14 @@ async function loadMetaAndFacets({ preserveValues = false } = {}) {
   const previous = preserveValues ? collectFormValues() : null;
   const [metaResponse, facetResponse] = await Promise.all([fetch("/api/meta"), fetch("/api/facets")]); meta = await metaResponse.json(); facets = await facetResponse.json();
   if (!metaResponse.ok) throw new Error(meta.detail || "無法讀取學期資訊"); if (!facetResponse.ok) throw new Error(facets.detail || "無法讀取篩選資料");
-  $("#termText").textContent = `輔仁大學公開課程大綱 API｜${meta.academic_year} 學年度第 ${meta.semester} 學期｜${meta.course_count.toLocaleString()} 門`;
+  const dataUpdated = meta.course_data_updated_at ? new Date(meta.course_data_updated_at * 1000).toLocaleString("zh-TW", { hour12: false }) : "";
+  $("#termText").textContent = [
+    "輔仁大學公開課程大綱 API",
+    `${meta.academic_year} 學年度第 ${meta.semester} 學期`,
+    meta.course_scope ? `課綱範圍 ${meta.course_scope}` : "",
+    `${meta.course_count.toLocaleString()} 門`,
+    dataUpdated ? `資料更新：${dataUpdated}` : "",
+  ].filter(Boolean).join("｜");
   fillSelect("#departmentSelect", facets.departments, "全部系所"); fillSelect("#sectionSelect", (facets.sections || []).filter((item) => item.count), "全部節次"); fillSelect("#roomSelect", facets.rooms, "全部教室"); fillSelect("#creditsSelect", facets.credits, "不限學分");
   fillSelect("#reqSelect", facets.required_elective, "全部"); fillSelect("#divisionSelect", facets.divisions, "全部部別"); fillSelect("#gradeSelect", facets.grades, "全部年級"); fillSelect("#studyLevelSelect", facets.study_levels, "全部層級");
   fillSelect("#courseTagSelect", facets.course_tags, "全部標籤"); fillSelect("#classSelect", facets.classes, "全部班別"); fillSelect("#teachingLanguageSelect", facets.teaching_languages, "全部授課語言"); fillSelect("#materialLanguageSelect", facets.material_languages, "全部教材語言");
@@ -157,7 +164,14 @@ function renderCourses() {
     node.querySelector(".req-badge").textContent = course.required_elective || "未標示"; const indexBadge = node.querySelector(".index-badge"); indexBadge.textContent = course.detail_indexed ? "完整索引" : "基本資料"; indexBadge.classList.add(course.detail_indexed ? "fit-badge" : "neutral-badge");
     node.querySelector(".course-meta").textContent = [course.course_code, course.teacher, course.credits !== null && course.credits !== "" ? `${course.credits} 學分` : "", course.department, course.grade ? `${course.grade} 年級` : "", course.division, course.class_group, course.teaching_language ? `授課：${course.teaching_language}` : ""].filter(Boolean).join("｜");
     node.querySelector(".meeting-text").textContent = meetingLabel(course); const tagsRoot = node.querySelector(".course-tags"); for (const tag of course.course_tags || []) { const span = document.createElement("span"); span.className = "course-tag"; span.textContent = tag.label; tagsRoot.append(span); }
-    node.querySelector(".outline-link").href = course.outline_url; node.querySelector(".detail-btn").addEventListener("click", () => showDetail(course)); const button = node.querySelector(".add-btn"); const exists = selectedCourses().some((item) => item.id === course.id); button.textContent = exists ? "已在課表" : "加入課表"; button.disabled = exists; button.addEventListener("click", () => addCourse(course)); root.append(node);
+    node.querySelector(".outline-link").href = course.outline_url;
+    const detailButton = node.querySelector(".detail-btn");
+    const staticUnindexed = Boolean(meta?.pages_mode && !course.detail_indexed);
+    detailButton.textContent = staticUnindexed ? "完整資料尚未同步" : "完整資料";
+    detailButton.disabled = staticUnindexed;
+    detailButton.title = staticUnindexed ? "此課尚未完成 GitHub Pages 詳細索引，請先查看官方課綱" : "";
+    if (!staticUnindexed) detailButton.addEventListener("click", () => showDetail(course));
+    const button = node.querySelector(".add-btn"); const exists = selectedCourses().some((item) => item.id === course.id); button.textContent = exists ? "已在課表" : "加入課表"; button.disabled = exists; button.addEventListener("click", () => addCourse(course)); root.append(node);
   }
 }
 function renderPager() { $("#resultCount").textContent = `共 ${totalResults.toLocaleString()} 門｜本頁 ${currentCourses.length} 門`; $("#pageText").textContent = `${currentPage} / ${totalPages}`; $("#prevPageBtn").disabled = currentPage <= 1; $("#nextPageBtn").disabled = currentPage >= totalPages; }
@@ -168,10 +182,69 @@ async function search({ resetPage = false, updateUrl = true } = {}) {
 }
 
 function escapeHtml(value) { return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char])); }
+function compactObjectRows(rows) {
+  return (rows || []).map((row) => {
+    if (row === null || row === undefined) return "";
+    if (typeof row !== "object") return String(row);
+    return Object.values(row).filter((value) => value !== null && value !== undefined && value !== "" && typeof value !== "object").join("｜");
+  }).filter(Boolean).join("\n");
+}
 function renderDetail(course) {
-  const methods = (course.teaching_methods || []).map((item) => `${item.label} ${item.percent}%`).join("、") || "未提供"; const assessments = (course.assessments || []).map((item) => `${item.label} ${item.percent}%`).join("、") || "未提供"; const relations = (course.relations || []).map((item) => `${item.label}${item.strength === "indirect" ? "（間接）" : ""}`).join("、") || "未提供";
+  const methods = (course.teaching_methods || []).map((item) => `${item.label} ${item.percent}%`).join("、") || "未提供";
+  const assessments = (course.assessments || []).map((item) => `${item.label} ${item.percent}%`).join("、") || "未提供";
+  const relations = (course.relations || []).map((item) => {
+    const desc = item.description ? `：${item.description}` : "";
+    return `${item.label || item.id}${item.strength === "indirect" ? "（間接）" : ""}${desc}`;
+  }).join("\n") || "未提供";
   const online = course.online_teaching ? [course.online_teaching.sync ? "同步" : "", course.online_teaching.async ? "非同步" : ""].filter(Boolean).join("＋") || "純實體／未標示線上" : "未提供";
-  $("#detailTitle").textContent = course.name; $("#detailContent").innerHTML = `<dl class="detail-grid"><dt>課號</dt><dd>${escapeHtml(course.course_code || "未提供")}</dd><dt>教師</dt><dd>${escapeHtml(course.teacher || "未提供")}</dd><dt>授課語言</dt><dd>${escapeHtml(course.teaching_language || "未提供")}</dd><dt>教材語言</dt><dd>${escapeHtml(course.material_language || "未提供")}</dd><dt>時間</dt><dd>${escapeHtml(meetingLabel(course))}</dd><dt>教學方式</dt><dd>${escapeHtml(methods)}</dd><dt>評量方式</dt><dd>${escapeHtml(assessments)}</dd><dt>線上教學</dt><dd>${escapeHtml(online)}</dd><dt>能力／議題</dt><dd>${escapeHtml(relations)}</dd><dt>先修</dt><dd>${escapeHtml(course.prerequisite || "未提供")}</dd><dt>課程目標</dt><dd>${escapeHtml(course.objective || "未提供")}</dd><dt>每週進度</dt><dd class="preline">${escapeHtml(course.weekly_progress || "未提供")}</dd><dt>教材</dt><dd class="preline">${escapeHtml(course.materials_text || "未提供")}</dd></dl>`;
+  const teachers = (course.instructors || []).map((item) => [item.name_zh || item.name_en, item.title_zh, item.employment_type_zh].filter(Boolean).join("／")).filter(Boolean).join("、") || course.teacher || "未提供";
+  const contact = course.teacher_contact || {};
+  const contactText = [
+    contact.email ? `Email：${contact.email}` : "",
+    contact.office ? `辦公室：${contact.office}` : "",
+    contact.course_office_hours ? `Office Hours：${contact.course_office_hours}` : "",
+  ].filter(Boolean).join("\n") || "未提供";
+  const materials = course.materials || {};
+  const materialsText = [
+    materials.summary ? `教材概要：${materials.summary}` : "",
+    materials.textbook ? `教科書：${materials.textbook}` : "",
+    materials.references ? `參考書：${materials.references}` : "",
+    materials.platform_url ? `教學平台：${materials.platform_url}` : "",
+    compactObjectRows(materials.course_materials || []),
+  ].filter(Boolean).join("\n") || course.materials_text || "未提供";
+  const weeklyRows = (course.weekly_progress_items || []).map((item) => {
+    const head = [item.week !== null && item.week !== undefined ? `第${item.week}週` : "", item.date, item.unit, item.topic, item.notes].filter(Boolean).join(" ");
+    const hours = [
+      item.physical_hours ? `實體 ${item.physical_hours}h` : "",
+      item.sync_online_hours ? `同步 ${item.sync_online_hours}h` : "",
+      item.async_online_hours ? `非同步 ${item.async_online_hours}h` : "",
+    ].filter(Boolean).join("／");
+    return [head, hours].filter(Boolean).join("｜");
+  }).join("\n") || course.weekly_progress || "未提供";
+  const makeup = compactObjectRows(course.makeup_classes || []) || "未提供";
+  const completion = course.outline_completion ? (course.outline_completion.is_done ? "官方標示已完成" : "官方尚未標示完成") : "未提供";
+  $("#detailTitle").textContent = course.name;
+  $("#detailContent").innerHTML = `<dl class="detail-grid">
+    <dt>課號</dt><dd>${escapeHtml(course.course_code || "未提供")}</dd>
+    <dt>教師</dt><dd class="preline">${escapeHtml(teachers)}</dd>
+    <dt>教師聯絡</dt><dd class="preline">${escapeHtml(contactText)}</dd>
+    <dt>授課語言</dt><dd>${escapeHtml(course.teaching_language || "未提供")}</dd>
+    <dt>教材語言</dt><dd>${escapeHtml(course.material_language || "未提供")}</dd>
+    <dt>時間／教室</dt><dd>${escapeHtml(meetingLabel(course))}</dd>
+    <dt>教學方式</dt><dd>${escapeHtml(methods)}</dd>
+    <dt>評量方式</dt><dd>${escapeHtml(assessments)}</dd>
+    <dt>線上教學</dt><dd>${escapeHtml(online)}</dd>
+    <dt>能力／議題</dt><dd class="preline">${escapeHtml(relations)}</dd>
+    <dt>先修課程</dt><dd class="preline">${escapeHtml(course.prerequisite || "未提供")}</dd>
+    <dt>課程目標</dt><dd class="preline">${escapeHtml(course.objective || "未提供")}</dd>
+    <dt>學習規範</dt><dd class="preline">${escapeHtml(course.learning_norms || "未提供")}</dd>
+    <dt>其他備註</dt><dd class="preline">${escapeHtml(course.outline_notes || "未提供")}</dd>
+    <dt>選課備註</dt><dd class="preline">${escapeHtml(course.enrollment_note || "未提供")}</dd>
+    <dt>每週進度</dt><dd class="preline">${escapeHtml(weeklyRows)}</dd>
+    <dt>教材／參考資料</dt><dd class="preline">${escapeHtml(materialsText)}</dd>
+    <dt>停補課／教師請假</dt><dd class="preline">${escapeHtml(makeup)}</dd>
+    <dt>課綱狀態</dt><dd>${escapeHtml(completion)}</dd>
+  </dl>`;
 }
 async function showDetail(course) {
   $("#detailDialog").showModal(); $("#detailTitle").textContent = course.name; $("#detailContent").innerHTML = '<div class="status">載入完整課程資料…</div>';
