@@ -206,8 +206,24 @@ def patch_static_js() -> None:
     schedule_path.write_text(schedule, encoding="utf-8")
 
 
+async def fetch_list_catalog_with_retry(attempts: int = 4) -> list[dict]:
+    last_error: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return await fetch_list_catalog()
+        except Exception as exc:
+            last_error = exc
+            if attempt >= attempts:
+                break
+            delay = attempt * 5
+            print(f"FJU list API failed (attempt {attempt}/{attempts}): {exc}; retrying in {delay}s")
+            await asyncio.sleep(delay)
+    assert last_error is not None
+    raise last_error
+
+
 async def main() -> None:
-    basic = await fetch_list_catalog()
+    basic = await fetch_list_catalog_with_retry()
     courses, _ = merge_enriched(basic)
     apply_department_reference(courses)
     indexed = sum(1 for course in courses if course.get("detail_indexed"))
