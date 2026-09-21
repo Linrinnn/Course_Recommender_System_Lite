@@ -41,6 +41,7 @@ DAYTIME_SECTIONS = set(OFFICIAL_SECTIONS[:10])
 EVENING_SECTIONS = set(OFFICIAL_SECTIONS[10:])
 GRADE_RE = re.compile(r"^(.+?)([一二三四五六七八])([甲乙丙丁戊己庚辛壬癸愛智仁勇忠孝信義和平]*)$")
 GRADE_MAP = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8}
+DETAIL_SCHEMA_VERSION = 2
 ASSESSMENT_FAMILIES = {
     "exam": {"1", "6", "7", "8", "9", "14"},
     "writing": {"2", "3", "10", "12", "18"},
@@ -180,6 +181,7 @@ def normalize_list_row(row: dict[str, Any]) -> dict[str, Any]:
         "materials_text": "",
         "enrollment_note": "",
         "detail_indexed": False,
+        "detail_schema_version": 0,
         "raw_list": row,
     }
 
@@ -516,6 +518,7 @@ async def enrich_course(course: dict[str, Any]) -> dict[str, Any]:
         },
         "enrollment_note": _string(details.get("avaNote")),
         "detail_indexed": True,
+        "detail_schema_version": DETAIL_SCHEMA_VERSION,
         "detail_indexed_at": int(time.time()),
     })
     result.pop("raw_list", None)
@@ -547,9 +550,11 @@ def merge_enriched(courses: list[dict[str, Any]]) -> tuple[list[dict[str, Any]],
         if detail:
             base = dict(course)
             base.update(detail)
-            base["detail_indexed"] = True
+            is_current = int(detail.get("detail_schema_version") or 0) >= DETAIL_SCHEMA_VERSION
+            base["detail_indexed"] = is_current
             merged.append(base)
-            count += 1
+            if is_current:
+                count += 1
         else:
             merged.append(course)
     return merged, count
