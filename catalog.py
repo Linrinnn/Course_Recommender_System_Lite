@@ -20,6 +20,7 @@ DETAIL_ENDPOINTS = {
     "info_and_book": "OutlineMaintain/CourseInfoAndBook",
     "course_progress": "OutlineMaintain/CourseCP",
     "methods": "OutlineMaintain/CourseMethods",
+    "tch_leaves": "TchLeaves",
 }
 
 HY = int(os.environ.get("FJU_HY", "115"))
@@ -32,6 +33,8 @@ DETAIL_CONCURRENCY = max(1, min(int(os.environ.get("FJU_DETAIL_CONCURRENCY", "4"
 DATA_DIR = Path(os.environ.get("FJU_DATA_DIR", "data_runtime"))
 ENRICHED_PATH = DATA_DIR / f"enriched_{HY}_{HT}.jsonl"
 FAILED_PATH = DATA_DIR / f"enriched_{HY}_{HT}_failures.jsonl"
+LIST_SNAPSHOT_PATH = DATA_DIR / f"course_list_{HY}_{HT}_{SCO_TYP}.json"
+LIST_SNAPSHOT_META_PATH = DATA_DIR / f"course_list_{HY}_{HT}_{SCO_TYP}.meta.json"
 
 OFFICIAL_SECTIONS = ["D0", "D1", "D2", "D3", "D4", "DN", "D5", "D6", "D7", "D8", "E0", "E1", "E2", "E3", "E4"]
 DAYTIME_SECTIONS = set(OFFICIAL_SECTIONS[:10])
@@ -137,11 +140,16 @@ def normalize_list_row(row: dict[str, Any]) -> dict[str, Any]:
     department, grade_from_label, class_from_label = split_department_grade(raw_department)
     division = _string(_first(row, "dayCNa", "division", "divisionName", "dayNgt"))
     credits = _number(_first(row, "credit", "credits"))
+    course_code = _string(_first(row, "avaNO", "jAvaNO", "couNo"))
+    name_zh = _string(_first(row, "couCNa", "courseName", "name"))
+    name_en = _string(_first(row, "couENa", "courseNameEn"))
+    display_name = name_zh or name_en or course_code or (f"課程 {jon}" if jon else "未命名課程")
     return {
         "id": _string(jon),
-        "course_code": _string(_first(row, "avaNO", "jAvaNO", "couNo")),
-        "name": _string(_first(row, "couCNa", "courseName", "name")),
-        "name_en": _string(_first(row, "couENa", "courseNameEn")),
+        "course_code": course_code,
+        "name": display_name,
+        "name_zh": name_zh,
+        "name_en": name_en,
         "teacher": _string(_first(row, "tchCNa", "teacherName", "tchName")),
         "teacher_en": _string(_first(row, "tchENa", "teacherNameEn")),
         "credits": credits,
@@ -221,7 +229,86 @@ async def fetch_list_catalog(concurrency: int = FETCH_CONCURRENCY) -> list[dict[
         for payload in payloads:
             rows.extend((payload.get("result") or {}).get("result") or [])
     courses = [normalize_list_row(row) for row in rows]
-    return [course for course in courses if course["id"] and course["name"]]
+    return [course for course in courses if course["id"]]
+
+
+def load_list_snapshot() -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    if not LIST_SNAPSHOT_PATH.exists():
+        return [], {}
+    try:
+        courses = json.loads(LIST_SNAPSHOT_PATH.read_text(encoding="utf-8"))
+        meta = (
+            json.loads(LIST_SNAPSHOT_META_PATH.read_text(encoding="utf-8"))
+            if LIST_SNAPSHOT_META_PATH.exists()
+            else {}
+        )
+    except (OSError, json.JSONDecodeError):
+        return [], {}
+    if not isinstance(courses, list):
+        return [], {}
+    valid = [item for item in courses if isinstance(item, dict) and item.get("id")]
+    return valid, meta if isinstance(meta, dict) else {}
+
+
+def _validate_list_catalog(courses: list[dict[str, Any]], previous_count: int = 0) -> None:
+    count = len(courses)
+    minimum = int(os.environ.get("FJU_MIN_COURSE_COUNT", "4000" if SCO_TYP == 100 else "1"))
+    if count < minimum:
+        raise ValueError(f"課程清單只有 {count} 門，低於安全門檻 {minimum}，拒絕覆蓋快照")
+    unique_ids = {str(course.get("id")) for course in courses if course.get("id")}
+    if len(unique_ids) != count:
+        raise ValueError(f"課程清單含重複 ID：{count} 筆、{len(unique_ids)} 個唯一 ID")
+    if previous_count and count < int(previous_count * 0.85):
+        raise ValueError(f"課程清單由 {previous_count} 驟降到 {count}，拒絕覆蓋最近成功快照")
+
+
+def save_list_snapshot(courses: list[dict[str, Any]]) -> dict[str, Any]:
+    previous, _ = load_list_snapshot()
+    _validate_list_catalog(courses, len(previous))
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    LIST_SNAPSHOT_PATH.write_text(
+        json.dumps(courses, ensure_ascii=False, separators=(",", ":")),
+        encoding="utf-8",
+    )
+    meta = {
+        "hy": HY,
+        "ht": HT,
+        "sco_typ": SCO_TYP,
+        "count": len(courses),
+        "updated_at": int(time.time()),
+    }
+    LIST_SNAPSHOT_META_PATH.write_text(
+        json.dumps(meta, ensure_ascii=False, separators=(",", ":")),
+        encoding="utf-8",
+    )
+    return meta
+
+
+async def get_list_catalog(*, refresh: bool = False, retries: int = 4) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    snapshot, snapshot_meta = load_list_snapshot()
+    if snapshot and not refresh:
+        return snapshot, {**snapshot_meta, "source": "snapshot"}
+
+    last_error: Exception | None = None
+    for attempt in range(1, max(1, retries) + 1):
+        try:
+            courses = await fetch_list_catalog()
+            meta = save_list_snapshot(courses)
+            return courses, {**meta, "source": "live"}
+        except Exception as exc:
+            last_error = exc
+            if attempt < retries:
+                await asyncio.sleep(attempt * 5)
+
+    if snapshot:
+        print(f"Warning: FJU API refresh failed; using last known good snapshot: {last_error}")
+        return snapshot, {
+            **snapshot_meta,
+            "source": "snapshot_fallback",
+            "refresh_error": str(last_error),
+        }
+    assert last_error is not None
+    raise last_error
 
 
 def _result(payload: Any, default: Any) -> Any:
@@ -264,7 +351,10 @@ def _normalize_relations(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         result.append({
             "id": f"{core_no}:{item_no}",
             "group": group_map.get(core_no, "core_competencies"),
+            "group_label": _string(item.get("coreName")),
             "label": _string(item.get("itemName")),
+            "description": _string(item.get("itemDesc")),
+            "note": _string(item.get("note")),
             "strength": "direct" if item.get("relation") == 3 else "indirect",
         })
     return result
@@ -294,6 +384,35 @@ def _materials_text(info: dict[str, Any], progress: dict[str, Any]) -> str:
     return "\n".join(part for part in parts if part)
 
 
+def _weekly_progress_items(progress: dict[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for item in progress.get("weeklyCP") or []:
+        if not isinstance(item, dict):
+            continue
+        rows.append({
+            "week": item.get("cweek"),
+            "date": _string(item.get("dte")),
+            "unit": _string(item.get("unit")),
+            "topic": _string(item.get("theme")),
+            "notes": _string(item.get("other")),
+            "physical_hours": _number(item.get("physicalClassHr")),
+            "sync_online_hours": _number(item.get("syncOnlineClassHr")),
+            "async_online_hours": _number(item.get("asyncOnlineClassHr")),
+            "materials": item.get("weeklyTeaMater") or [],
+        })
+    return rows
+
+
+def _material_details(info: dict[str, Any], progress: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "summary": _string(info.get("cm")),
+        "textbook": _string(info.get("book")),
+        "references": _string(info.get("refBook")),
+        "platform_url": _string(info.get("tchUrl")),
+        "course_materials": progress.get("courseTeaMater") or [],
+    }
+
+
 async def enrich_course(course: dict[str, Any]) -> dict[str, Any]:
     jon = course["id"]
     details_payload = await fetch_json(DETAIL_ENDPOINTS["course_details"], jonCouSn=jon, lcid=LCID, fromStu="true")
@@ -307,16 +426,18 @@ async def enrich_course(course: dict[str, Any]) -> dict[str, Any]:
         except Exception:
             return {"result": None}
 
-    relations_payload, info_payload, progress_payload, methods_payload = await asyncio.gather(
+    relations_payload, info_payload, progress_payload, methods_payload, leaves_payload = await asyncio.gather(
         safe(DETAIL_ENDPOINTS["relations"], **common),
         safe(DETAIL_ENDPOINTS["info_and_book"], **common),
         safe(DETAIL_ENDPOINTS["course_progress"], **common),
         safe(DETAIL_ENDPOINTS["methods"], **common),
+        safe(DETAIL_ENDPOINTS["tch_leaves"], jonCouSn=jon),
     )
     relations = _result(relations_payload, [])
     info = _result(info_payload, {})
     progress = _result(progress_payload, {})
     methods = _result(methods_payload, [])
+    leaves = _result(leaves_payload, [])
     weekly, online = _weekly_progress(progress)
 
     raw_department = _string(details.get("dptGrdCN")) or course.get("raw_department", "")
@@ -327,14 +448,26 @@ async def enrich_course(course: dict[str, Any]) -> dict[str, Any]:
     instructors: list[dict[str, str]] = []
     primary_id = _string(details.get("tchNo")) or f"name:{teacher or teacher_en}"
     if teacher or teacher_en:
-        instructors.append({"id": primary_id, "name_zh": teacher, "name_en": teacher_en})
+        instructors.append({
+            "id": primary_id,
+            "name_zh": teacher,
+            "name_en": teacher_en,
+            "title_zh": _string(details.get("titleCNa")),
+            "title_en": _string(details.get("titleENa")),
+            "employment_type_zh": _string(details.get("sideCNa")),
+            "employment_type_en": _string(details.get("sideENa")),
+            "email": _string(info.get("email") or info.get("contact")),
+            "office": _string(info.get("office")),
+            "course_office_hours": _string(info.get("courseOfficeHr")),
+            "is_primary": True,
+        })
     for extra in details.get("tchList") or []:
         if not isinstance(extra, dict):
             continue
         name_zh, name_en = _string(extra.get("tchCNa")), _string(extra.get("tchENa"))
         ident = _string(extra.get("tchNo")) or f"name:{name_zh or name_en}"
         if ident and not any(item["id"] == ident for item in instructors):
-            instructors.append({"id": ident, "name_zh": name_zh, "name_en": name_en})
+            instructors.append({"id": ident, "name_zh": name_zh, "name_en": name_en, "is_primary": False})
 
     result = dict(course)
     result.update({
@@ -364,7 +497,23 @@ async def enrich_course(course: dict[str, Any]) -> dict[str, Any]:
         "prerequisite": _string(info.get("preCourse")),
         "objective": _string(info.get("obj")),
         "weekly_progress": weekly,
+        "weekly_progress_items": _weekly_progress_items(progress),
         "materials_text": _materials_text(info, progress),
+        "materials": _material_details(info, progress),
+        "learning_norms": _string(info.get("norms")),
+        "outline_notes": _string(info.get("other")),
+        "teacher_contact": {
+            "email": _string(info.get("email") or info.get("contact")),
+            "office": _string(info.get("office")),
+            "course_office_hours": _string(info.get("courseOfficeHr")),
+        },
+        "makeup_classes": leaves if isinstance(leaves, list) else [],
+        "outline_completion": {
+            "is_done": bool(details.get("isDone")),
+            "all_is_done": bool(details.get("allIsDone")),
+            "default_is_done": bool(details.get("defaultIsDone")),
+            "lcid_is_done": bool(details.get("lcIdIsDone")),
+        },
         "enrollment_note": _string(details.get("avaNote")),
         "detail_indexed": True,
         "detail_indexed_at": int(time.time()),
