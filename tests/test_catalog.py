@@ -13,6 +13,7 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(course["grade"], 2)
         self.assertEqual(course["class_group"], "甲班")
         self.assertEqual(course["meetings"][0]["sections"], ["D5", "D6"])
+        self.assertEqual(course["meetings"][0]["room"], "SF123")
         self.assertEqual(course["credits_number"], 3.0)
 
     def test_search_score_requires_all_query_terms(self):
