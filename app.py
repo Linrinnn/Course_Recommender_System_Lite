@@ -110,6 +110,21 @@ def _section_options(courses: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [{"value": section, "label": section, "count": counter.get(section, 0)} for section in OFFICIAL_SECTIONS]
 
 
+def _room_options(courses: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    counter: Counter[str] = Counter()
+    for course in courses:
+        rooms = {
+            str(meeting.get("room") or "").strip()
+            for meeting in course.get("meetings") or []
+            if str(meeting.get("room") or "").strip()
+        }
+        counter.update(rooms)
+    return [
+        {"value": room, "label": room, "count": count}
+        for room, count in sorted(counter.items(), key=lambda pair: pair[0].casefold())
+    ]
+
+
 def _tag_options(courses: list[dict[str, Any]]) -> list[dict[str, Any]]:
     counter: Counter[tuple[str, str]] = Counter()
     for course in courses:
@@ -224,6 +239,7 @@ async def facets() -> dict[str, Any]:
         "teachers": counted_options(course.get("teacher") for course in courses),
         "instructors": _instructor_options(courses),
         "sections": _section_options(courses),
+        "rooms": _room_options(courses),
         "teaching_languages": counted_options(course.get("teaching_language") for course in courses),
         "material_languages": counted_options(course.get("material_language") for course in courses),
         "teaching_methods": weighted_options(courses, "teaching_methods"),
@@ -260,6 +276,7 @@ async def courses(
     weekday: int | None = Query(None, ge=1, le=7),
     section: str = Query("", max_length=20),
     sections: str = Query("", max_length=200),
+    room: str = Query("", max_length=80),
     time_of_day: str = Query("all", pattern="^(all|daytime|evening|weekday_evening_or_saturday)$"),
     include_unknown_schedule: bool = Query(True),
     min_credits: float | None = Query(None, ge=0, le=30),
@@ -322,6 +339,11 @@ async def courses(
         if class_group and class_group.casefold() not in course.get("class_group", "").casefold():
             continue
         meetings = course.get("meetings") or []
+        if room and not any(
+            str(meeting.get("room") or "").casefold() == room.casefold()
+            for meeting in meetings
+        ):
+            continue
         if weekday and not any(meeting.get("weekday") == weekday for meeting in meetings):
             continue
         if section and not any(section.upper() in (meeting.get("sections") or []) for meeting in meetings):
