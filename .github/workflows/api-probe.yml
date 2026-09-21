@@ -66,3 +66,55 @@ jobs:
                   compact = str(payload2)[:500]
               print("AVAILABLE", sco, status2, json.dumps(compact, ensure_ascii=False, default=str))
               time.sleep(0.5)
+
+          # Audit the full scoTyp=100 listing to explain any count lost by normalization.
+          all_rows = []
+          page_size = 100
+          status, first_payload = get(
+              "OutlineQuery/OutlineStudentQuery",
+              scoTyp=100, hy=hy, ht=ht, PageNumber=1, PageSize=page_size, lcid=lcid
+          )
+          if status == 200 and isinstance(first_payload, dict):
+              result = first_payload.get("result") or {}
+              total_pages = int(result.get("totalPages") or 0)
+              all_rows.extend(result.get("result") or [])
+              for page in range(2, total_pages + 1):
+                  st, pl = get(
+                      "OutlineQuery/OutlineStudentQuery",
+                      scoTyp=100, hy=hy, ht=ht, PageNumber=page, PageSize=page_size, lcid=lcid
+                  )
+                  if st != 200 or not isinstance(pl, dict):
+                      print("FULL_PAGE_FAILURE", page, st, str(pl)[:300])
+                      continue
+                  all_rows.extend((pl.get("result") or {}).get("result") or [])
+              ids = [row.get("jonCouSn") for row in all_rows]
+              missing_id = [row for row in all_rows if not row.get("jonCouSn")]
+              missing_name = [row for row in all_rows if not str(row.get("couCNa") or "").strip()]
+              unique_ids = {x for x in ids if x is not None}
+              terms = {}
+              done = 0
+              for row in all_rows:
+                  terms[str(row.get("term"))] = terms.get(str(row.get("term")), 0) + 1
+                  done += int(bool(row.get("isDone")))
+              print("FULL100", json.dumps({
+                  "rows": len(all_rows),
+                  "unique_ids": len(unique_ids),
+                  "missing_id": len(missing_id),
+                  "missing_name": len(missing_name),
+                  "missing_name_rows": missing_name[:10],
+                  "terms": terms,
+                  "isDone_true": done,
+              }, ensure_ascii=False, default=str))
+
+          # Probe the separate official latest-course page; this is a different source
+          # from the outline API and may explain larger counts in third-party apps.
+          try:
+              req = urllib.request.Request(
+                  "https://estu.fju.edu.tw/fjucourse/ava_form.asp",
+                  headers={"User-Agent": "Mozilla/5.0 FJU-Course-Recommender-Diagnostic/1.0"}
+              )
+              with urllib.request.urlopen(req, timeout=45) as response:
+                  body = response.read().decode("big5", "replace")
+                  print("ESTU_PAGE", response.status, len(body), repr(body[:1800]))
+          except Exception as exc:
+              print("ESTU_PAGE_ERROR", repr(exc))
