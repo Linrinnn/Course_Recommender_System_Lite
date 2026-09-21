@@ -15,6 +15,7 @@ from app import (
     _facet_coverage,
     _instructor_options,
     _numeric_options,
+    _room_options,
     _section_options,
     _tag_options,
 )
@@ -152,6 +153,7 @@ def build_facets(courses: list[dict]) -> dict:
         "teachers": counted_options(course.get("teacher") for course in courses),
         "instructors": _instructor_options(courses),
         "sections": _section_options(courses),
+        "rooms": _room_options(courses),
         "teaching_languages": counted_options(course.get("teaching_language") for course in courses),
         "material_languages": counted_options(course.get("material_language") for course in courses),
         "teaching_methods": weighted_options(courses, "teaching_methods"),
