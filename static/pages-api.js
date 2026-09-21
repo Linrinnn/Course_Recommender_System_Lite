@@ -275,7 +275,14 @@
       if (detailMatch) {
         const courseId = decodeURIComponent(detailMatch[1]);
         const course = data.courses.find((item) => String(item.id) === courseId);
-        return course ? jsonResponse(course) : jsonResponse({ detail: '找不到課程' }, 404);
+        if (!course) return jsonResponse({ detail: '找不到課程' }, 404);
+        if (!course.detail_indexed) {
+          return jsonResponse({
+            detail: '此課程尚未同步完整課綱；請先使用官方課綱連結，GitHub Actions 會持續補齊詳細資料。',
+            outline_url: course.outline_url,
+          }, 409);
+        }
+        return jsonResponse(course);
       }
       return jsonResponse({ detail: `Pages 模式不支援：${path}` }, 404);
     } catch (error) {

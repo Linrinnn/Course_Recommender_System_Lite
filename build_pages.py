@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import shutil
 import urllib.request
 from collections import Counter
@@ -24,8 +25,9 @@ from catalog import (
     HY,
     LCID,
     OFFICIAL_SECTIONS,
+    SCO_TYP,
     counted_options,
-    fetch_list_catalog,
+    get_list_catalog,
     merge_enriched,
     relation_options,
     weighted_options,
@@ -206,24 +208,9 @@ def patch_static_js() -> None:
     schedule_path.write_text(schedule, encoding="utf-8")
 
 
-async def fetch_list_catalog_with_retry(attempts: int = 4) -> list[dict]:
-    last_error: Exception | None = None
-    for attempt in range(1, attempts + 1):
-        try:
-            return await fetch_list_catalog()
-        except Exception as exc:
-            last_error = exc
-            if attempt >= attempts:
-                break
-            delay = attempt * 5
-            print(f"FJU list API failed (attempt {attempt}/{attempts}): {exc}; retrying in {delay}s")
-            await asyncio.sleep(delay)
-    assert last_error is not None
-    raise last_error
-
-
 async def main() -> None:
-    basic = await fetch_list_catalog_with_retry()
+    refresh_list = str(os.environ.get("FJU_REFRESH_LIST", "")).lower() in {"1", "true", "yes"}
+    basic, list_meta = await get_list_catalog(refresh=refresh_list)
     courses, _ = merge_enriched(basic)
     apply_department_reference(courses)
     indexed = sum(1 for course in courses if course.get("detail_indexed"))
@@ -255,6 +242,11 @@ async def main() -> None:
         "course_count": len(courses),
         "detail_indexed": indexed,
         "detail_index_complete": bool(courses) and indexed == len(courses),
+        "course_source": "FJU Outline API",
+        "course_scope": f"scoTyp={SCO_TYP}",
+        "course_data_source": list_meta.get("source", "unknown"),
+        "course_data_updated_at": list_meta.get("updated_at"),
+        "course_data_count": list_meta.get("count", len(courses)),
         "pages_mode": True,
         "pages_generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
@@ -269,6 +261,7 @@ async def main() -> None:
     )
     print(
         f"Pages build: {len(courses)} courses, {indexed} enriched, "
+        f"list={list_meta.get('source', 'unknown')}, "
         f"{len(payload['facets']['departments'])} department options -> {DIST}"
     )
 

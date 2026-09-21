@@ -18,7 +18,7 @@ permissions:
 
 concurrency:
   group: github-pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -47,6 +47,12 @@ jobs:
 
       - name: Build static Pages site
         run: python build_pages.py
+
+      - name: Save last-known-good course cache
+        uses: actions/cache/save@v4
+        with:
+          path: data_runtime
+          key: fju-pages-115-1-${{ github.run_id }}
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
