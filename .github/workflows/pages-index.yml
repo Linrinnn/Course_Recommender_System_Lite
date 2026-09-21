@@ -22,8 +22,8 @@ permissions:
   id-token: write
 
 concurrency:
-  group: github-pages
-  cancel-in-progress: false
+  group: fju-course-index
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -53,7 +53,11 @@ jobs:
       - name: Build complete course detail index
         env:
           INDEX_LIMIT: ${{ github.event.inputs.limit || '5000' }}
-        run: python build_catalog.py --limit "$INDEX_LIMIT" --concurrency 4 --refresh-list
+          FJU_FETCH_CONCURRENCY: '8'
+          FJU_DETAIL_CONCURRENCY: '8'
+          FJU_HTTP_CONCURRENCY: '20'
+          FJU_HTTP_RETRIES: '3'
+        run: python build_catalog.py --limit "$INDEX_LIMIT" --concurrency 8 --refresh-list
 
       - name: Save updated course detail cache
         uses: actions/cache/save@v4

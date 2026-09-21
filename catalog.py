@@ -6,8 +6,7 @@ import os
 import re
 import time
 import unicodedata
-import urllib.parse
-import urllib.request
+import httpx
 from collections import Counter
 from pathlib import Path
 from typing import Any, Iterable
@@ -28,8 +27,10 @@ HT = int(os.environ.get("FJU_HT", "1"))
 LCID = int(os.environ.get("FJU_LCID", "1028"))
 SCO_TYP = int(os.environ.get("FJU_SCO_TYP", "100"))
 PAGE_SIZE = int(os.environ.get("FJU_PAGE_SIZE", "100"))
-FETCH_CONCURRENCY = max(1, min(int(os.environ.get("FJU_FETCH_CONCURRENCY", "4")), 8))
-DETAIL_CONCURRENCY = max(1, min(int(os.environ.get("FJU_DETAIL_CONCURRENCY", "4")), 8))
+FETCH_CONCURRENCY = max(1, min(int(os.environ.get("FJU_FETCH_CONCURRENCY", "8")), 12))
+DETAIL_CONCURRENCY = max(1, min(int(os.environ.get("FJU_DETAIL_CONCURRENCY", "8")), 12))
+HTTP_CONCURRENCY = max(4, min(int(os.environ.get("FJU_HTTP_CONCURRENCY", "20")), 32))
+HTTP_RETRIES = max(0, min(int(os.environ.get("FJU_HTTP_RETRIES", "3")), 6))
 DATA_DIR = Path(os.environ.get("FJU_DATA_DIR", "data_runtime"))
 ENRICHED_PATH = DATA_DIR / f"enriched_{HY}_{HT}.jsonl"
 FAILED_PATH = DATA_DIR / f"enriched_{HY}_{HT}_failures.jsonl"
@@ -186,21 +187,72 @@ def normalize_list_row(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _fetch_json_sync(endpoint: str, params: dict[str, Any]) -> dict[str, Any]:
-    query = urllib.parse.urlencode({k: v for k, v in params.items() if v is not None})
-    request = urllib.request.Request(
-        f"{BASE_URL}/{endpoint}?{query}",
-        headers={
-            "User-Agent": "Mozilla/5.0 FJU-Course-Recommender-LitePlus/3.0",
-            "Accept": "application/json,text/plain,*/*",
-        },
-    )
-    with urllib.request.urlopen(request, timeout=45) as response:
-        return json.loads(response.read().decode("utf-8"))
+_HTTP_CLIENT: httpx.AsyncClient | None = None
+_HTTP_SEMAPHORE: asyncio.Semaphore | None = None
+_HTTP_LOOP: asyncio.AbstractEventLoop | None = None
+_TRANSIENT_STATUS = {429, 500, 502, 503, 504}
+
+
+def _http_resources() -> tuple[httpx.AsyncClient, asyncio.Semaphore]:
+    global _HTTP_CLIENT, _HTTP_SEMAPHORE, _HTTP_LOOP
+    loop = asyncio.get_running_loop()
+    if _HTTP_CLIENT is None or _HTTP_CLIENT.is_closed or _HTTP_LOOP is not loop:
+        _HTTP_CLIENT = httpx.AsyncClient(
+            base_url=f"{BASE_URL}/",
+            headers={
+                "User-Agent": "Mozilla/5.0 FJU-Course-Recommender-LitePlus/4.0",
+                "Accept": "application/json,text/plain,*/*",
+            },
+            timeout=httpx.Timeout(30.0, connect=10.0),
+            limits=httpx.Limits(
+                max_connections=HTTP_CONCURRENCY,
+                max_keepalive_connections=HTTP_CONCURRENCY,
+                keepalive_expiry=30.0,
+            ),
+        )
+        _HTTP_SEMAPHORE = asyncio.Semaphore(HTTP_CONCURRENCY)
+        _HTTP_LOOP = loop
+    assert _HTTP_SEMAPHORE is not None
+    return _HTTP_CLIENT, _HTTP_SEMAPHORE
+
+
+async def close_http_client() -> None:
+    global _HTTP_CLIENT, _HTTP_SEMAPHORE, _HTTP_LOOP
+    if _HTTP_CLIENT is not None and not _HTTP_CLIENT.is_closed:
+        await _HTTP_CLIENT.aclose()
+    _HTTP_CLIENT = None
+    _HTTP_SEMAPHORE = None
+    _HTTP_LOOP = None
 
 
 async def fetch_json(endpoint: str, **params: Any) -> dict[str, Any]:
-    return await asyncio.to_thread(_fetch_json_sync, endpoint, params)
+    client, semaphore = _http_resources()
+    filtered = {key: value for key, value in params.items() if value is not None}
+    last_error: Exception | None = None
+
+    for attempt in range(HTTP_RETRIES + 1):
+        try:
+            async with semaphore:
+                response = await client.get(endpoint, params=filtered)
+            if response.status_code in _TRANSIENT_STATUS and attempt < HTTP_RETRIES:
+                retry_after = response.headers.get("Retry-After")
+                delay = float(retry_after) if retry_after and retry_after.isdigit() else min(5.0, 0.5 * (2 ** attempt))
+                await asyncio.sleep(delay)
+                continue
+            response.raise_for_status()
+            payload = response.json()
+            if not isinstance(payload, dict):
+                raise ValueError(f"Unexpected JSON payload from {endpoint}")
+            return payload
+        except (httpx.TimeoutException, httpx.TransportError) as exc:
+            last_error = exc
+            if attempt >= HTTP_RETRIES:
+                raise
+            await asyncio.sleep(min(5.0, 0.5 * (2 ** attempt)))
+
+    if last_error:
+        raise last_error
+    raise RuntimeError(f"Failed to fetch {endpoint}")
 
 
 async def fetch_list_page(page_number: int) -> dict[str, Any]:
