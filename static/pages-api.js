@@ -290,13 +290,4 @@
     }
   };
 
-  document.addEventListener('DOMContentLoaded', () => {
-    const build = document.querySelector('#buildIndexBtn');
-    if (build) {
-      build.disabled = true;
-      build.textContent = '由 GitHub Actions 自動更新';
-    }
-    const note = document.querySelector('.index-note');
-    if (note) note.textContent = '此為 GitHub Pages 版。課程索引由 GitHub Actions 自動產生，不需要在本機啟動 Python。';
-  });
 })();
