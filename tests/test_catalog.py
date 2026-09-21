@@ -44,6 +44,7 @@ class EnrichmentTests(unittest.IsolatedAsyncioTestCase):
             catalog.DETAIL_ENDPOINTS["info_and_book"]: {"result": {"obj": "學會測試", "preCourse": "程式設計", "book": "教材"}},
             catalog.DETAIL_ENDPOINTS["course_progress"]: {"result": {"weeklyCP": [{"theme": "單元一", "syncOnlineClassHr": 1, "asyncOnlineClassHr": 0}]}},
             catalog.DETAIL_ENDPOINTS["methods"]: {"result": [{"mType": 1, "methodsDetails": [{"methodSN": 2, "methodName": "討論", "percent": 60}]}, {"mType": 2, "methodsDetails": [{"methodSN": 4, "methodName": "報告", "percent": 100}]}]},
+            catalog.DETAIL_ENDPOINTS["tch_leaves"]: {"result": [{"cweek": 3, "note": "補課"}]},
         }
 
         async def fake_fetch(endpoint, **params):
@@ -58,6 +59,8 @@ class EnrichmentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(detail["teaching_methods"][0]["label"], "討論")
         self.assertEqual(detail["assessments"][0]["label"], "報告")
         self.assertEqual(detail["relations"][0]["group"], "sdgs")
+        self.assertEqual(detail["makeup_classes"][0]["note"], "補課")
+        self.assertEqual(detail["materials"]["textbook"], "教材")
 
 
 if __name__ == "__main__":
