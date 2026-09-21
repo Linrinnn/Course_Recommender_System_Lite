@@ -11,7 +11,6 @@ let totalPages = 1;
 let totalResults = 0;
 let selectedSections = new Set();
 let state = loadState();
-let indexPollTimer = null;
 
 function makeId() { return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`; }
 function loadState() {
@@ -90,24 +89,6 @@ function applyUrlFilters() {
   const sections = params.get("sections"); if (sections) selectedSections = new Set(sections.split(",").filter(Boolean));
 }
 
-function indexPercent(indexed, total) { return total ? Math.min(100, Math.round(indexed / total * 100)) : 0; }
-function renderIndexStatus(status) {
-  const indexed = status.catalog_indexed ?? meta?.detail_indexed ?? 0; const total = status.catalog_total ?? meta?.course_count ?? 0; const percent = indexPercent(indexed, total);
-  $("#indexProgressBar").style.width = `${percent}%`; $("#buildIndexBtn").disabled = Boolean(status.running) || Boolean(status.complete);
-  if (status.complete) { $("#indexStatusText").textContent = `完整：${indexed.toLocaleString()} / ${total.toLocaleString()} 門（100%）`; $("#buildIndexBtn").textContent = "完整索引已建立"; }
-  else if (status.running) { $("#indexStatusText").textContent = `建立中：${indexed.toLocaleString()} / ${total.toLocaleString()} 門（${percent}%）${status.current ? `｜${status.current}` : ""}${status.failed ? `｜失敗 ${status.failed}` : ""}`; $("#buildIndexBtn").textContent = "索引建立中…"; }
-  else { $("#indexStatusText").textContent = `已索引 ${indexed.toLocaleString()} / ${total.toLocaleString()} 門（${percent}%）。可續跑。`; $("#buildIndexBtn").textContent = "建立／續跑完整索引"; }
-  if (status.last_error) $("#indexStatusText").textContent += `｜錯誤：${status.last_error}`;
-}
-async function pollIndexStatus({ refreshFacetsWhenDone = false } = {}) {
-  try {
-    const response = await fetch("/api/index/status"); const status = await response.json(); if (!response.ok) throw new Error(status.detail || "索引狀態讀取失敗");
-    renderIndexStatus(status);
-    if (status.running) { clearTimeout(indexPollTimer); indexPollTimer = setTimeout(() => pollIndexStatus({ refreshFacetsWhenDone: true }), 1600); }
-    else if (refreshFacetsWhenDone) { await loadMetaAndFacets({ preserveValues: true }); await search(); }
-  } catch (error) { $("#indexStatusText").textContent = error.message; }
-}
-
 function collectFormValues() {
   const selectors = ["#searchInput", "#departmentSelect", "#weekdaySelect", "#sectionSelect", "#roomSelect", "#creditsSelect", "#reqSelect", "#divisionSelect", "#gradeSelect", "#studyLevelSelect", "#courseTagSelect", "#teacherInput", "#classSelect", "#timeOfDaySelect", "#scheduleSelect", "#teachingLanguageSelect", "#materialLanguageSelect", "#teachingMethodSelect", "#assessmentSelect", "#assessmentStyleSelect", "#onlineTeachingSelect", "#relationSelect", "#prerequisiteInput", "#detailIndexedSelect", "#sortSelect", "#teachingMethodCriterionSelect", "#teachingMethodMinInput", "#assessmentCriterionSelect", "#assessmentMinInput"];
   return Object.fromEntries(selectors.map((selector) => [selector, $(selector)?.value ?? ""]));
@@ -132,8 +113,11 @@ async function loadMetaAndFacets({ preserveValues = false } = {}) {
   fillSelect("#courseTagSelect", facets.course_tags, "全部標籤"); fillSelect("#classSelect", facets.classes, "全部班別"); fillSelect("#teachingLanguageSelect", facets.teaching_languages, "全部授課語言"); fillSelect("#materialLanguageSelect", facets.material_languages, "全部教材語言");
   fillSelect("#teachingMethodSelect", facets.teaching_methods, "全部教學方式"); fillSelect("#assessmentSelect", facets.assessments, "全部評量方式"); fillSelect("#relationSelect", facets.relations, "全部能力／議題"); fillDatalist("#teacherOptions", facets.teachers); renderSectionChips();
   if (previous) restoreFormValues(previous); else applyUrlFilters();
-  const indexed = meta.detail_indexed || 0; const total = meta.course_count || 0; $("#enrichedCoverageText").textContent = `目前完整索引 ${indexed.toLocaleString()} / ${total.toLocaleString()} 門；進階條件只會正確涵蓋已索引課程。`;
-  renderIndexStatus({ catalog_indexed: indexed, catalog_total: total, complete: meta.detail_index_complete, running: false }); updateFilterSummary();
+  const indexed = meta.detail_indexed || 0; const total = meta.course_count || 0;
+  $("#enrichedCoverageText").textContent = indexed >= total && total
+    ? `完整資料已同步 ${indexed.toLocaleString()} / ${total.toLocaleString()} 門`
+    : `完整資料已同步 ${indexed.toLocaleString()} / ${total.toLocaleString()} 門；系統自動更新，無需操作`;
+  updateFilterSummary();
 }
 
 function buildSearchParams() {
@@ -262,8 +246,7 @@ function openSchedule() { const popup = window.open("/schedule", "fjuCourseSched
 $("#searchBtn").addEventListener("click", () => search({ resetPage: true })); $("#applyFiltersBtn").addEventListener("click", () => search({ resetPage: true })); $("#resetFiltersBtn").addEventListener("click", resetFilters); $("#openScheduleBtn").addEventListener("click", openSchedule);
 $("#prevPageBtn").addEventListener("click", () => { if (currentPage > 1) { currentPage -= 1; search(); } }); $("#nextPageBtn").addEventListener("click", () => { if (currentPage < totalPages) { currentPage += 1; search(); } }); $("#searchInput").addEventListener("keydown", (event) => { if (event.key === "Enter") search({ resetPage: true }); });
 $("#closeDetailBtn").addEventListener("click", () => $("#detailDialog").close()); $("#detailDialog").addEventListener("click", (event) => { if (event.target === $("#detailDialog")) $("#detailDialog").close(); });
-$("#buildIndexBtn").addEventListener("click", async () => { $("#buildIndexBtn").disabled = true; try { const response = await fetch("/api/index/start", { method: "POST" }); const data = await response.json(); if (!response.ok) throw new Error(data.detail || "無法啟動索引"); renderIndexStatus(data); pollIndexStatus({ refreshFacetsWhenDone: true }); } catch (error) { $("#indexStatusText").textContent = error.message; $("#buildIndexBtn").disabled = false; } });
 $("#refreshBtn").addEventListener("click", async () => { $("#refreshBtn").disabled = true; try { const response = await fetch("/api/refresh", { method: "POST" }); const data = await response.json(); if (!response.ok) throw new Error(data.detail || "更新失敗"); await loadMetaAndFacets({ preserveValues: true }); await search({ updateUrl: false }); } catch (error) { window.alert(error.message); } finally { $("#refreshBtn").disabled = false; } });
 window.addEventListener("storage", (event) => { if (event.key === stateKey) { state = loadState(); updateScheduleCount(); renderCourses(); } });
 
-try { await loadMetaAndFacets(); updateScheduleCount(); await search({ updateUrl: false }); await pollIndexStatus(); } catch (error) { $("#status").textContent = error.message; }
+try { await loadMetaAndFacets(); updateScheduleCount(); await search({ updateUrl: false }); } catch (error) { $("#status").textContent = error.message; }
