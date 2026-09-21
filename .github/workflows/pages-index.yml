@@ -1,6 +1,12 @@
 name: Refresh GitHub Pages course index
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'catalog.py'
+      - 'build_catalog.py'
+      - '.github/workflows/pages-index.yml'
   workflow_dispatch:
     inputs:
       limit:
