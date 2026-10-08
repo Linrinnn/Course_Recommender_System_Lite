@@ -59,6 +59,18 @@ class UIWorkspaceTests(unittest.TestCase):
         self.assertIn('id="gradeChips"', html)
         self.assertIn('id="weekdayChips"', html)
         self.assertIn('id="roomLookup"', html)
+        self.assertIn('class="app-rail"', html)
+        self.assertIn('class="app-content"', html)
+        self.assertIn('class="course-list-head"', html)
+        self.assertIn('class="course-teacher-cell"', html)
+        self.assertIn('class="course-time-cell"', html)
+        self.assertIn('class="course-credit-cell"', html)
+        self.assertIn('id="detailOfficialLink"', html)
+        self.assertEqual(parsed.tag_by_id["allCoursesTab"], "button")
+        self.assertEqual(parsed.tag_by_id["openScheduleBtn"], "button")
+        self.assertEqual(parsed.tag_by_id["detailDialog"], "dialog")
+        self.assertIn('aria-label="開啟官方課綱"', html)
+        self.assertNotIn('class="view-tabs"', html)
 
     def test_schedule_preserves_slot_controls(self):
         html = (STATIC / "schedule.html").read_text(encoding="utf-8")
@@ -80,11 +92,18 @@ class UIWorkspaceTests(unittest.TestCase):
         self.assertIn("setFilterPanelOpen", js)
         self.assertIn('$("#mobileFiltersBtn").addEventListener', js)
         self.assertIn('$("#filterBackdrop").addEventListener', js)
+        self.assertIn("dialog.detail-dialog[open]", css)
+        self.assertIn("@media (max-width: 680px)", css)
+        self.assertIn(".app-rail", css)
+        self.assertIn(".course-list-head", css)
+        self.assertIn("product-sheet-in", css)
 
     def test_pages_hotfix_does_not_overwrite_navigation(self):
         js = (STATIC / "pages-hotfix.js").read_text(encoding="utf-8")
         self.assertNotIn("scheduleButton.innerHTML", js)
         self.assertNotIn("setText(refreshButton", js)
+        modal = (STATIC / "schedule-modal.js").read_text(encoding="utf-8")
+        self.assertIn("!button.classList.contains('rail-item')", modal)
 
 
 if __name__ == "__main__":
