@@ -23,7 +23,7 @@ const rooms = [
   {value:"AA116",label:"AA116",count:3},
 ];
 assert.deepEqual(getLookupMatches(rooms,"room","").map(x=>x.value),["A205","AA116"]);
-assert.deepEqual(getLookupMatches(rooms,"room","1").map(x=>x.value),["1","A205","AA116"]);
+assert.deepEqual(getLookupMatches(rooms,"room","1").map(x=>x.value),["1","AA116"]);
 assert.deepEqual(getLookupMatches(rooms,"room","AA").map(x=>x.value),["AA116"]);
 assert.deepEqual(getLookupMatches(rooms,"room","not-found").map(x=>x.value),[]);
 assert.equal(getLookupMatches(departments,"department","",2).length,2);
