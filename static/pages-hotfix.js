@@ -17,10 +17,6 @@
       if (field) field.hidden = !useful;
     }
 
-    const departmentSelect = document.querySelector('#departmentSelect');
-    const departmentLabel = departmentSelect?.closest('label')?.querySelector('span');
-    setText(departmentLabel, '系所代碼');
-
   }
 
   document.addEventListener('DOMContentLoaded', () => {
