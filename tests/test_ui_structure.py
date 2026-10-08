@@ -78,11 +78,19 @@ class UIWorkspaceTests(unittest.TestCase):
         parsed.feed(html)
         self.assertEqual(len(parsed.ids), len(set(parsed.ids)))
         for required in (
-            "planSelect", "addPlanBtn", "renamePlanBtn", "deletePlanBtn",
+            "planSelect", "addPlanBtn", "clonePlanBtn", "renamePlanBtn", "deletePlanBtn",
             "clearPlanBtn", "timetableWrap", "slotSearchPanel", "slotResults",
-            "slotKeyword", "slotSearchBtn", "backToSearchBtn",
+            "slotKeyword", "slotSearchBtn", "backToSearchBtn", "viewMode",
+            "daySelect", "showWeekend", "dayNavigation", "prevDayBtn", "nextDayBtn",
+            "statCredits", "statGaps", "statConflicts", "statUnknown",
+            "busyForm", "busyList", "scheduleCourseDialog", "drawerCourseDetails",
+            "removeCourseBtn", "replaceCourseBtn", "undoBtn", "clonePlanBtn",
+            "exportPngBtn", "exportIcsBtn", "printPdfBtn", "exportBackupBtn",
+            "importBackupBtn", "backupFile", "comparePlanSelect", "comparePlanBtn",
         ):
             self.assertIn(required, parsed.ids)
+        self.assertIn('src="/static/schedule.js"', html)
+        self.assertIn('href="/static/schedule-v2.css"', html)
 
     def test_mobile_filter_styles_and_handlers_are_present(self):
         css = (STATIC / "styles.css").read_text(encoding="utf-8")
