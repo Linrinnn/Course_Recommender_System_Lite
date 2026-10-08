@@ -16,6 +16,7 @@ const fixture = {
   ],
 };
 global.location = { href: "https://example.github.io/Course_Recommender_System_Lite/" };
+global.document = { baseURI: global.location.href };
 global.window = {
   fetch: async () => new Response(JSON.stringify(fixture), { status: 200 }),
 };
