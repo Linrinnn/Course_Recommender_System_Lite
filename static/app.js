@@ -11,6 +11,121 @@ let totalPages = 1;
 let totalResults = 0;
 let selectedSections = new Set();
 let state = loadState();
+const favoriteKey = "fju-course-liteplus:favorites-v1";
+const viewKey = "fju-course-liteplus:saved-views-v1";
+let favoriteCourses = loadLocalList(favoriteKey);
+let savedViews = loadLocalList(viewKey);
+let comparedCourses = [];
+let viewMode = "all";
+let avoidConflicts = new URLSearchParams(location.search).get("avoid_conflicts") === "1";
+let searchSequence = 0;
+
+function loadLocalList(key) {
+  try {
+    const data = JSON.parse(localStorage.getItem(key) || "[]");
+    return Array.isArray(data) ? data : [];
+  } catch { return []; }
+}
+function persistList(key, values) {
+  try { localStorage.setItem(key, JSON.stringify(values)); }
+  catch { window.alert("瀏覽器儲存空間不足，無法保存這項操作。"); }
+}
+function snapshotCourse(course) {
+  const fields = [
+    "id", "course_code", "name", "name_en", "teacher", "teacher_en",
+    "credits", "credits_number", "department", "department_code", "division",
+    "grade", "class_group", "required_elective", "teaching_language",
+    "meetings", "outline_url", "course_tags", "detail_indexed",
+  ];
+  return Object.fromEntries(fields.map((name) => [name, course[name] ?? null]));
+}
+function hasFavorite(id) { return favoriteCourses.some((course) => String(course.id) === String(id)); }
+function compareHas(id) { return comparedCourses.some((course) => String(course.id) === String(id)); }
+function toggleFavorite(course) {
+  if (hasFavorite(course.id)) favoriteCourses = favoriteCourses.filter((item) => String(item.id) !== String(course.id));
+  else favoriteCourses.unshift(snapshotCourse(course));
+  persistList(favoriteKey, favoriteCourses);
+  if (viewMode === "favorites") search({ updateUrl: false }); else renderCourses();
+}
+function toggleCompare(course) {
+  if (compareHas(course.id)) comparedCourses = comparedCourses.filter((item) => String(item.id) !== String(course.id));
+  else if (comparedCourses.length >= 3) return window.alert("最多可同時比較三門課程。");
+  else comparedCourses.push(snapshotCourse(course));
+  renderCourses();
+}
+function blockedSlots() {
+  const used = new Set();
+  for (const course of selectedCourses()) for (const meeting of course.meetings || []) {
+    if (!Number.isInteger(meeting.weekday) || meeting.weekday < 1 || meeting.weekday > 7) continue;
+    for (const section of meeting.sections || []) used.add(`${meeting.weekday}:${String(section).toUpperCase()}`);
+  }
+  return used;
+}
+function courseOverlaps(course, blocked) {
+  return (course.meetings || []).some((meeting) =>
+    (meeting.sections || []).some((section) => blocked.has(`${meeting.weekday}:${String(section).toUpperCase()}`))
+  );
+}
+function updateCourseToolsUI() {
+  $("#favoriteCount").textContent = String(favoriteCourses.length);
+  $("#allCoursesTab").classList.toggle("selected", viewMode === "all");
+  $("#favoritesTab").classList.toggle("selected", viewMode === "favorites");
+  $("#allCoursesTab").setAttribute("aria-pressed", String(viewMode === "all"));
+  $("#favoritesTab").setAttribute("aria-pressed", String(viewMode === "favorites"));
+  $("#conflictFreeBtn").classList.toggle("selected", avoidConflicts);
+  $("#conflictFreeBtn").setAttribute("aria-pressed", String(avoidConflicts));
+  $("#compareCount").textContent = String(comparedCourses.length);
+  $("#compareOpenBtn").disabled = comparedCourses.length < 2;
+  const message = $("#viewMessage");
+  const parts = [];
+  if (viewMode === "favorites") parts.push("收藏課程儲存在此瀏覽器；僅套用關鍵字及基本篩選。");
+  if (avoidConflicts && !blockedSlots().size) parts.push("目前課表沒有已排定的節次，暫時無課程需要排除。");
+  message.textContent = parts.join(" ");
+  message.classList.toggle("hidden", !parts.length);
+}
+function renderSavedViews() {
+  const select = $("#savedViewsSelect");
+  const previous = select.value;
+  select.replaceChildren(new Option("選擇已儲存的條件", ""));
+  savedViews.forEach((item) => select.append(new Option(item.name, item.id)));
+  if ([...select.options].some((option) => option.value === previous)) select.value = previous;
+  $("#deleteViewBtn").disabled = !select.value;
+}
+function saveCurrentView() {
+  const name = window.prompt("這組篩選條件的名稱", "常用課表")?.trim();
+  if (!name) return;
+  savedViews.push({
+    id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+    name: name.slice(0, 40),
+    values: collectFormValues(),
+    sections: [...selectedSections],
+    avoidConflicts,
+  });
+  savedViews = savedViews.slice(-12);
+  persistList(viewKey, savedViews);
+  renderSavedViews();
+  $("#savedViewsSelect").value = savedViews[savedViews.length - 1].id;
+  $("#deleteViewBtn").disabled = false;
+}
+function applySavedView(id) {
+  const saved = savedViews.find((item) => item.id === id);
+  if (!saved) return;
+  resetFilters({ searchNow: false });
+  restoreFormValues(saved.values || {});
+  selectedSections = new Set(saved.sections || []);
+  avoidConflicts = Boolean(saved.avoidConflicts);
+  viewMode = "all";
+  renderSectionChips();
+  search({ resetPage: true });
+}
+function deleteSavedView() {
+  const id = $("#savedViewsSelect").value;
+  if (!id) return;
+  savedViews = savedViews.filter((item) => item.id !== id);
+  persistList(viewKey, savedViews);
+  renderSavedViews();
+}
+
 
 function makeId() { return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`; }
 function loadState() {
@@ -112,6 +227,8 @@ async function loadMetaAndFacets({ preserveValues = false } = {}) {
   fillSelect("#courseTagSelect", facets.course_tags, "全部標籤"); fillSelect("#classSelect", facets.classes, "全部班別"); fillSelect("#teachingLanguageSelect", facets.teaching_languages, "全部授課語言"); fillSelect("#materialLanguageSelect", facets.material_languages, "全部教材語言");
   fillSelect("#teachingMethodSelect", facets.teaching_methods, "全部教學方式"); fillSelect("#assessmentSelect", facets.assessments, "全部評量方式"); fillSelect("#relationSelect", facets.relations, "全部能力／議題"); fillDatalist("#teacherOptions", facets.teachers); renderSectionChips();
   if (previous) restoreFormValues(previous); else applyUrlFilters();
+  renderSavedViews();
+  updateCourseToolsUI();
   const indexed = meta.detail_indexed || 0; const total = meta.course_count || 0;
   $("#enrichedCoverageText").textContent = indexed >= total && total
     ? `完整資料已同步 ${indexed.toLocaleString()} / ${total.toLocaleString()} 門`
@@ -125,14 +242,22 @@ function buildSearchParams() {
   const defaults = new Map([["time_of_day", "all"], ["schedule", "all"], ["assessment_style", "all"], ["online_teaching", "all"], ["detail_indexed", "all"], ["teaching_method_criterion", "dominant"], ["assessment_criterion", "dominant"]]);
   for (const [key, selector] of mappings) { const value = $(selector).value.trim(); if (value && value !== defaults.get(key)) params.set(key, value); }
   const credits = $("#creditsSelect").value; if (credits) { params.set("min_credits", credits); params.set("max_credits", credits); }
-  if (selectedSections.size) params.set("sections", [...selectedSections].join(",")); if ($("#timeOfDaySelect").value !== "all") params.set("include_unknown_schedule", "false"); return params;
+  if (selectedSections.size) params.set("sections", [...selectedSections].join(","));
+  if ($("#timeOfDaySelect").value !== "all") params.set("include_unknown_schedule", "false");
+  if (avoidConflicts) {
+    params.set("avoid_conflicts", "1");
+    const slots = [...blockedSlots()];
+    if (slots.length) params.set("exclude_slots", slots.join(","));
+  }
+  return params;
 }
 function updateFilterSummary() {
   const parts = []; const mappings = [["#departmentSelect", "系所"], ["#weekdaySelect", "星期"], ["#sectionSelect", "節次"], ["#roomSelect", "教室"], ["#creditsSelect", "學分"], ["#reqSelect", "必選修"], ["#divisionSelect", "部別"], ["#gradeSelect", "年級"], ["#studyLevelSelect", "層級"], ["#courseTagSelect", "標籤"], ["#teacherInput", "教師"], ["#classSelect", "班別"], ["#teachingLanguageSelect", "授課語言"], ["#materialLanguageSelect", "教材語言"], ["#teachingMethodSelect", "教學方式"], ["#assessmentSelect", "評量方式"], ["#relationSelect", "能力／議題"], ["#prerequisiteInput", "先修"]];
   for (const [selector, label] of mappings) { const node = $(selector); if (!node?.value) continue; const text = node.tagName === "SELECT" ? node.selectedOptions[0].textContent.replace(/（\d+）$/, "") : node.value; parts.push(`${label}：${text}`); }
   if ($("#timeOfDaySelect").value !== "all") parts.push(`時段：${$("#timeOfDaySelect").selectedOptions[0].textContent}`); if ($("#scheduleSelect").value !== "all") parts.push($("#scheduleSelect").selectedOptions[0].textContent);
   if ($("#assessmentStyleSelect").value !== "all") parts.push(`評量類型：${$("#assessmentStyleSelect").selectedOptions[0].textContent}`); if ($("#onlineTeachingSelect").value !== "all") parts.push(`線上：${$("#onlineTeachingSelect").selectedOptions[0].textContent}`); if ($("#detailIndexedSelect").value !== "all") parts.push($("#detailIndexedSelect").selectedOptions[0].textContent); if (selectedSections.size) parts.push(`精確節次：${[...selectedSections].join("、")}`);
-  $("#activeFilterText").textContent = parts.length ? parts.join("｜") : "未套用額外條件";
+  if (avoidConflicts) parts.push("避開衝堂");
+  $("#activeFilterText").textContent = parts.length ? parts.join("｜") : "尚未設定篩選條件";
   const advancedNodes = ["#divisionSelect", "#gradeSelect", "#studyLevelSelect", "#courseTagSelect", "#teacherInput", "#classSelect", "#teachingLanguageSelect", "#materialLanguageSelect", "#teachingMethodSelect", "#assessmentSelect", "#relationSelect", "#prerequisiteInput"];
   let count = advancedNodes.filter((selector) => $(selector).value).length + selectedSections.size + Number($("#timeOfDaySelect").value !== "all") + Number($("#scheduleSelect").value !== "all") + Number($("#assessmentStyleSelect").value !== "all") + Number($("#onlineTeachingSelect").value !== "all") + Number($("#detailIndexedSelect").value !== "all"); $("#advancedCount").textContent = count;
 }
