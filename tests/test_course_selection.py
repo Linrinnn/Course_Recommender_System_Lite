@@ -81,6 +81,15 @@ class ConflictFilterTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual({str(item["value"]) for item in data["grades"]}, {"1", "2"})
                 self.assertEqual({item["value"] for item in data["classes"]}, {"乙"})
 
+    async def test_basic_course_summary_available_without_detail_index(self):
+        items = [sample("abc", 1, ["D1"])]
+        with patch("app._load_courses", new=AsyncMock(return_value=items)):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                result = await client.get("/api/course-summary/abc")
+                self.assertEqual(result.status_code, 200)
+                self.assertEqual(result.json()["meetings"][0]["weekday"], 1)
+                self.assertEqual((await client.get("/api/course-summary/bad")).status_code, 404)
+
     async def test_bad_exclusion_ignored_and_other_weekday_untouched(self):
         items = [sample("1", 1, ["D1"]), sample("2", 2, ["D1"])]
         with patch("app._load_courses", new=AsyncMock(return_value=items)):
