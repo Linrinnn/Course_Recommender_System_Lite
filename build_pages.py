@@ -191,10 +191,10 @@ def rewrite_html(source: str, *, schedule: bool = False) -> str:
     )
     if '<script src="./static/pages-hotfix.js"></script>' not in value:
         value = value.replace(marker, f'{loaders}\n  {marker}')
-    # Cache-bust JS and CSS in every deployment to prevent mixed old JS / new HTML.
+    # Cache-bust JavaScript, CSS and branding SVG, preventing old assets with new HTML.
     version = os.environ.get("GITHUB_SHA", "local")[:12]
     value = re.sub(
-        r'((?:src|href)="\./static/[^"]+\.(?:js|css))(")',
+        r'((?:src|href)="\./static/[^"]+\.(?:js|css|svg))(")',
         lambda match: f'{match.group(1)}?v={version}{match.group(2)}',
         value,
     )
