@@ -40,3 +40,4 @@ jobs:
           node --check static/pages-api.js
           node --check static/department-fix.js
           node --check static/pages-hotfix.js
+          node tests/test_pages_course_filter.cjs
