@@ -243,7 +243,29 @@ function resetFilters() {
 }
 function openSchedule() { const popup = window.open("/schedule", "fjuCourseSchedule", "width=1380,height=940,resizable=yes,scrollbars=yes"); popup?.focus(); }
 
-$("#searchBtn").addEventListener("click", () => search({ resetPage: true })); $("#applyFiltersBtn").addEventListener("click", () => search({ resetPage: true })); $("#resetFiltersBtn").addEventListener("click", resetFilters); $("#openScheduleBtn").addEventListener("click", openSchedule);
+function setFilterPanelOpen(open, { restoreFocus = true } = {}) {
+  document.body.classList.toggle("filters-open", open);
+  const toggle = $("#mobileFiltersBtn");
+  toggle?.setAttribute("aria-expanded", String(open));
+  if (open) $("#closeFiltersBtn")?.focus();
+  else if (restoreFocus) toggle?.focus();
+}
+
+$("#mobileFiltersBtn").addEventListener("click", () => setFilterPanelOpen(true));
+$("#closeFiltersBtn").addEventListener("click", () => setFilterPanelOpen(false));
+$("#filterBackdrop").addEventListener("click", () => setFilterPanelOpen(false));
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && document.body.classList.contains("filters-open")) setFilterPanelOpen(false);
+});
+const desktopQuery = window.matchMedia("(min-width: 901px)");
+desktopQuery.addEventListener("change", (event) => {
+  if (event.matches) setFilterPanelOpen(false, { restoreFocus: false });
+});
+
+$("#searchBtn").addEventListener("click", () => search({ resetPage: true }));
+$("#applyFiltersBtn").addEventListener("click", () => { setFilterPanelOpen(false, { restoreFocus: false }); search({ resetPage: true }); });
+$("#resetFiltersBtn").addEventListener("click", resetFilters);
+$("#openScheduleBtn").addEventListener("click", openSchedule);
 $("#prevPageBtn").addEventListener("click", () => { if (currentPage > 1) { currentPage -= 1; search(); } }); $("#nextPageBtn").addEventListener("click", () => { if (currentPage < totalPages) { currentPage += 1; search(); } }); $("#searchInput").addEventListener("keydown", (event) => { if (event.key === "Enter") search({ resetPage: true }); });
 $("#closeDetailBtn").addEventListener("click", () => $("#detailDialog").close()); $("#detailDialog").addEventListener("click", (event) => { if (event.target === $("#detailDialog")) $("#detailDialog").close(); });
 $("#refreshBtn").addEventListener("click", async () => { $("#refreshBtn").disabled = true; try { const response = await fetch("/api/refresh", { method: "POST" }); const data = await response.json(); if (!response.ok) throw new Error(data.detail || "更新失敗"); await loadMetaAndFacets({ preserveValues: true }); await search({ updateUrl: false }); } catch (error) { window.alert(error.message); } finally { $("#refreshBtn").disabled = false; } });
