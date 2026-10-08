@@ -142,6 +142,11 @@
     const teacher = text(params.get('teacher'));
     const classGroup = text(params.get('class_group'));
     const room = text(params.get('room'));
+    const excludedSlots = new Set(
+      (params.get('exclude_slots') || '').split(',')
+        .map((value) => value.trim().toUpperCase())
+        .filter((value) => /^[1-7]:[A-Z][A-Z0-9]?$/.test(value))
+    );
     const teachingLanguage = params.get('teaching_language') || '';
     const materialLanguage = params.get('material_language') || '';
     const prerequisite = text(params.get('prerequisite'));
@@ -186,6 +191,9 @@
       if (selectedInstructors.size && !(course.instructors || []).some((item) => selectedInstructors.has(String(item.id)))) continue;
       if (classGroup && !text(course.class_group).includes(classGroup)) continue;
       const meetings = course.meetings || [];
+      if (excludedSlots.size && meetings.some((m) =>
+        (m.sections || []).some((s) => excludedSlots.has(`${m.weekday}:${String(s).toUpperCase()}`))
+      )) continue;
       if (room && !meetings.some((m) => text(m.room) === room)) continue;
       if (weekday && !meetings.some((m) => m.weekday === weekday)) continue;
       if (section && !meetings.some((m) => (m.sections || []).includes(section))) continue;
