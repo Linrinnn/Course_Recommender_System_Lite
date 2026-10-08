@@ -679,6 +679,13 @@ function renderCourses() {
   for (const course of currentCourses) {
     const node = template.content.cloneNode(true);
     node.querySelector(".course-name").textContent = course.name;
+    node.querySelector(".course-code").textContent = course.course_code || "";
+    node.querySelector(".course-department").textContent = course.department || "系所未提供";
+    const levelNames = {undergraduate:"大學部", master:"碩士班", doctoral:"博士班"};
+    const levelLabel = node.querySelector(".course-level-tag");
+    const levelValue = course.study_level || "";
+    levelLabel.textContent = levelNames[levelValue] || course.division || "";
+    if (!levelLabel.textContent) levelLabel.classList.add("hidden");
     const favoriteButton = node.querySelector(".favorite-btn");
     const isFavorite = hasFavorite(course.id);
     favoriteButton.textContent = isFavorite ? "★" : "☆";
@@ -689,6 +696,7 @@ function renderCourses() {
     favoriteButton.addEventListener("click", () => toggleFavorite(course));
     const en = node.querySelector(".course-name-en"); en.textContent = course.name_en || ""; if (!course.name_en) en.classList.add("hidden");
     node.querySelector(".req-badge").textContent = course.required_elective || "未標示";
+    if (/必修/.test(course.required_elective || "")) node.querySelector(".req-badge").classList.add("badge-required");
     const indexBadge = node.querySelector(".index-badge");
     indexBadge.textContent = course.detail_indexed ? "課綱已同步" : "課綱待同步";
     indexBadge.classList.add(course.detail_indexed ? "fit-badge" : "neutral-badge");
@@ -715,14 +723,14 @@ function renderCourses() {
     node.querySelector(".outline-link").href = course.outline_url;
     const detailButton = node.querySelector(".detail-btn");
     const staticUnindexed = Boolean(meta?.pages_mode && !course.detail_indexed);
-    detailButton.textContent = staticUnindexed ? "資料待同步" : "查看詳情";
+    detailButton.textContent = staticUnindexed ? "資料待同步" : "查看完整資料";
     detailButton.disabled = staticUnindexed;
     detailButton.title = staticUnindexed ? "此課尚未完成 GitHub Pages 詳細索引，請先查看官方課綱" : "";
     if (!staticUnindexed) detailButton.addEventListener("click", () => showDetail(course));
     const button = node.querySelector(".add-btn"); const exists = selectedCourses().some((item) => item.id === course.id); button.textContent = exists ? "✓ 已加入" : "＋ 加入課表"; button.disabled = exists; button.addEventListener("click", () => addCourse(course)); root.append(node);
   }
 }
-function renderPager() { $("#resultCount").textContent = `${totalResults.toLocaleString()} 門`; $("#pageText").textContent = `${currentPage} / ${totalPages}`; $("#prevPageBtn").disabled = currentPage <= 1; $("#nextPageBtn").disabled = currentPage >= totalPages; }
+function renderPager() { $("#resultCount").textContent = `${totalResults.toLocaleString()} 筆`; $("#pageText").textContent = `${currentPage} / ${totalPages}`; $("#prevPageBtn").disabled = currentPage <= 1; $("#nextPageBtn").disabled = currentPage >= totalPages; }
 async function search({ resetPage = false, updateUrl = true } = {}) {
   if (resetPage) currentPage = 1;
   const sequence = ++searchSequence;
@@ -883,6 +891,23 @@ for (const selector of ["#teacherInput", "#prerequisiteInput"]) {
   $(selector).addEventListener("input", () => queueSearch(350));
 }
 $("#searchInput").addEventListener("input", () => queueSearch(350));
+// The top navigation uses real actions: no nonfunctional menu items.
+$("#navPlansBtn").addEventListener("click", openSchedule);
+$("#navHelpBtn").addEventListener("click", () => $("#siteHelpDialog").showModal());
+$("#navInfoBtn").addEventListener("click", () => $("#siteInfoDialog").showModal());
+$("#closeSiteHelpBtn").addEventListener("click", () => $("#siteHelpDialog").close());
+$("#closeSiteInfoBtn").addEventListener("click", () => $("#siteInfoDialog").close());
+$("#helpStartBtn").addEventListener("click", () => {
+  $("#siteHelpDialog").close();
+  $("#searchInput").focus();
+});
+for (const dialogSelector of ["#siteHelpDialog", "#siteInfoDialog"]) {
+  $(dialogSelector).addEventListener("click", (event) => {
+    if (event.target === $(dialogSelector)) $(dialogSelector).close();
+  });
+}
+// Sort was intentionally moved out of the filter drawer into results toolbar.
+$("#sortSelect").addEventListener("change", () => search({ resetPage: true }));
 $("#guideSearchBtn").addEventListener("click", () => {
   $("#searchInput").scrollIntoView({behavior:"smooth",block:"center"});
   $("#searchInput").focus();
