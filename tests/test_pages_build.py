@@ -24,12 +24,17 @@ class PagesBuildTests(unittest.TestCase):
     def test_rewrite_html_cache_busts_static_assets(self):
         html = (
             '<link href="/static/styles.css" rel="stylesheet">'
+            '<link href="/static/guided-ui.css" rel="stylesheet">'
+            '<link href="/static/brand-mark.svg" rel="icon">'
+            '<img src="/static/brand-mark.svg">'
             '<script src="/static/schedule-modal.js"></script>'
             '<script type="module" src="/static/app.js"></script>'
         )
         with patch.dict("os.environ", {"GITHUB_SHA": "fedcba9876543210"}):
             out = build_pages.rewrite_html(html)
         self.assertIn('styles.css?v=fedcba987654', out)
+        self.assertIn('guided-ui.css?v=fedcba987654', out)
+        self.assertIn('brand-mark.svg?v=fedcba987654', out)
         self.assertIn('app.js?v=fedcba987654', out)
         self.assertIn('pages-api.js?v=fedcba987654', out)
         self.assertIn('pages-hotfix.js?v=fedcba987654', out)

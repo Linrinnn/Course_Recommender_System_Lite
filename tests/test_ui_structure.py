@@ -77,6 +77,20 @@ class UIWorkspaceTests(unittest.TestCase):
         self.assertEqual(parsed.tag_by_id["detailDialog"], "dialog")
         self.assertIn('aria-label="開啟官方課綱"', html)
         self.assertNotIn('class="view-tabs"', html)
+        self.assertIn('href="/static/guided-ui.css"', html)
+        self.assertIn('class="journey-intro"', html)
+        self.assertIn('class="planning-sidebar"', html)
+        self.assertIn('class="hero-mobile-brand"', html)
+        for required in (
+            "guideSearchBtn","guideFilterBtn","guideScheduleBtn",
+            "openPlannerBtn","openComparisonBtn","activeFilterChips",
+            "plannerCourseCount","plannerCredits","plannerCourseList",
+            "clearResultsFiltersBtn",
+        ):
+            self.assertIn(required, parsed.ids)
+        self.assertIn('＋ 加入課表', html)
+        self.assertIn('查看詳情', html)
+        self.assertNotIn('id="compareDialog"', html)
 
     def test_schedule_preserves_slot_controls(self):
         html = (STATIC / "schedule.html").read_text(encoding="utf-8")
@@ -115,6 +129,24 @@ class UIWorkspaceTests(unittest.TestCase):
         self.assertIn(".app-rail", css)
         self.assertIn(".course-list-head", css)
         self.assertIn("product-sheet-in", css)
+
+    def test_guided_actions_use_real_schedule_state(self):
+        js = (STATIC / "app.js").read_text(encoding="utf-8")
+        style = (STATIC / "guided-ui.css").read_text(encoding="utf-8")
+        self.assertIn('$("#plannerCourseList")', js)
+        self.assertIn('$("#plannerCredits")', js)
+        self.assertIn('courses.reduce((sum, course)', js)
+        self.assertIn('function renderActiveFilterChips()', js)
+        self.assertIn('button.addEventListener("click", () => { chip.clear(); search({resetPage:true}); });', js)
+        self.assertIn('$("#guideFilterBtn").addEventListener', js)
+        self.assertIn('$("#openComparisonBtn").addEventListener', js)
+        self.assertIn('setFilterPanelOpen(true)', js)
+        self.assertIn('.planning-sidebar', style)
+        self.assertIn('.journey-intro', style)
+        self.assertIn('@media (max-width:680px)', style)
+        self.assertIn('.product-shell .course-actions .add-btn', style)
+        brand = (STATIC / "brand-mark.svg").read_text(encoding="utf-8")
+        self.assertIn('viewBox="0 0 72 72"', brand)
 
     def test_pages_hotfix_does_not_overwrite_navigation(self):
         js = (STATIC / "pages-hotfix.js").read_text(encoding="utf-8")
