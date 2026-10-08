@@ -9,7 +9,6 @@ import subprocess
 import time
 from pathlib import Path
 
-from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "visual-qa"
@@ -74,6 +73,7 @@ def bounds(page, selector):
 
 
 def run():
+    from playwright.sync_api import sync_playwright
     server = subprocess.Popen(
         ["python", "-m", "http.server", "8765", "--bind", "127.0.0.1", "--directory", str(ROOT)],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
