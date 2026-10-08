@@ -600,7 +600,13 @@ $("#importBackupBtn").addEventListener("click",()=>$("#backupFile").click());
 $("#backupFile").addEventListener("change",ev=>importBackup(ev.target.files?.[0]));
 $("#exportIcsBtn").addEventListener("click",exportICS);
 $("#exportPngBtn").addEventListener("click",drawPng);
-$("#printPdfBtn").addEventListener("click",()=>window.print());
+$("#printPdfBtn").addEventListener("click",()=>{
+  const previousMode=ui.mode,previousWeekend=ui.weekend;
+  ui.mode="week";ui.weekend=true;renderTimetable();
+  const restore=()=>{ui.mode=previousMode;ui.weekend=previousWeekend;renderTimetable();};
+  window.addEventListener("afterprint",restore,{once:true});
+  window.print();
+});
 for(const [selector,key] of [["#prefNoEarly","noEarly"],["#prefNoLate","noLate"],["#prefCompact","compact"]]){
   $(selector).checked=preferences[key];
   $(selector).addEventListener("change",ev=>{
