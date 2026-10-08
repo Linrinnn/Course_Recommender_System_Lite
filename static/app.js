@@ -575,7 +575,7 @@ function renderActiveFilterChips() {
         const item = $(selector).selectedOptions[0];
         const display = selector === "#departmentSelect" ? $("#departmentLookup").value
           : selector === "#roomSelect" ? $("#roomLookup").value
-          : item?.textContent?.replace(/（\\d+）$/, "") || $(selector).value;
+          : item?.textContent?.replace(/（\d+）$/, "") || $(selector).value;
         return { label: `${label}：${display}`, clear() {
           $(selector).value = "";
           if (selector === "#departmentSelect") {
