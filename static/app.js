@@ -1,3 +1,4 @@
+import { displayStudyLevel, getLookupMatches, departmentName } from "./filter-ui.mjs";
 const $ = (selector) => document.querySelector(selector);
 const weekdays = ["", "一", "二", "三", "四", "五", "六", "日"];
 const stateKey = "fju-course-liteplus:state";
@@ -161,7 +162,12 @@ function fillSelect(selector, options, firstLabel, { disableWhenEmpty = true } =
   const select = $(selector); if (!select) return;
   const previous = select.value; const values = options || [];
   select.replaceChildren(new Option(firstLabel, ""));
-  for (const item of values) select.append(new Option(optionLabel(item), item.value));
+  for (const item of values) select.append(new Option(
+    selector === "#studyLevelSelect"
+      ? `${displayStudyLevel(item.value)}${Number.isFinite(Number(item.count)) ? `（${item.count} 門）` : ""}`
+      : optionLabel(item),
+    item.value
+  ));
   select.disabled = disableWhenEmpty && values.length === 0;
   if ([...select.options].some((option) => option.value === previous)) select.value = previous;
 }
@@ -223,54 +229,183 @@ function renderWeekdayChips() {
     selectedWeekdays, () => { renderWeekdayChips(); queueSearch(); });
 }
 
+const lookupState = {
+  department: {open:false, activeIndex:-1, choices:[]},
+  room: {open:false, activeIndex:-1, choices:[]},
+};
+function lookupParts(kind) {
+  return {
+    input: kind === "department" ? $("#departmentLookup") : $("#roomLookup"),
+    select: kind === "department" ? $("#departmentSelect") : $("#roomSelect"),
+    menu: kind === "department" ? $("#departmentMenu") : $("#roomMenu"),
+    field: kind === "department" ? $("#departmentLookupField") : $("#roomLookupField"),
+    items: kind === "department" ? facets.departments || [] : facets.rooms || [],
+  };
+}
 function updateLookupValue(kind) {
-  const select = kind === "department" ? $("#departmentSelect") : $("#roomSelect");
-  const input = kind === "department" ? $("#departmentLookup") : $("#roomLookup");
-  const entries = kind === "department" ? facets.departments || [] : facets.rooms || [];
-  const item = entries.find((entry) => String(entry.value) === select.value);
-  input.value = item ? String(item.label) : "";
+  const {input, select, items} = lookupParts(kind);
+  const chosen = items.find((item) => String(item.value) === select.value);
+  input.value = chosen ? (kind === "department" ? departmentName(chosen) : String(chosen.label ?? chosen.value)) : "";
 }
-function fillLookupOptions() {
-  for (const [selector, entries] of [
-    ["#departmentSuggestions", facets.departments || []],
-    ["#roomSuggestions", facets.rooms || []],
-  ]) {
-    const root = $(selector);
-    root.replaceChildren();
-    for (const entry of entries) {
-      const option = document.createElement("option");
-      option.value = String(entry.label);
-      option.label = String(entry.value);
-      root.append(option);
-    }
-  }
-  updateLookupValue("department");
-  updateLookupValue("room");
+function hideLookup(kind, {restore=false}={}) {
+  const {input,menu}=lookupParts(kind);
+  const state=lookupState[kind];
+  state.open=false;
+  state.activeIndex=-1;
+  state.choices=[];
+  menu.classList.add("hidden");
+  input.setAttribute("aria-expanded","false");
+  input.removeAttribute("aria-activedescendant");
+  if(restore)updateLookupValue(kind);
 }
-function commitLookup(kind, allowPartial = false) {
-  const select = kind === "department" ? $("#departmentSelect") : $("#roomSelect");
-  const input = kind === "department" ? $("#departmentLookup") : $("#roomLookup");
-  const items = kind === "department" ? facets.departments || [] : facets.rooms || [];
-  const value = input.value.trim().toLowerCase();
-  const exact = items.find((item) =>
-    String(item.label).toLowerCase() === value || String(item.value).toLowerCase() === value);
-  const potential = allowPartial && !exact && value ? items.filter((item) =>
-    String(item.label).toLowerCase().includes(value) || String(item.value).toLowerCase().includes(value)) : [];
-  const chosen = exact || (potential.length === 1 ? potential[0] : null);
-  const nextValue = chosen ? String(chosen.value) : "";
-  const changed = select.value !== nextValue;
-  select.value = nextValue;
-  if (chosen) input.value = String(chosen.label);
-  else if (!value) input.value = "";
-  if (changed) {
-    if (kind === "department") {
+function chooseLookup(kind,item) {
+  const {input,select}=lookupParts(kind);
+  const previous=select.value;
+  select.value=item?.value || "";
+  updateLookupValue(kind);
+  hideLookup(kind);
+  if(previous !== select.value) {
+    if(kind === "department") {
       selectedGrades.clear();
-      $("#classSelect").value = "";
+      $("#classSelect").value="";
       refreshLinkedOptions();
     }
     queueSearch();
   }
+  input.focus();
 }
+function highlightLookup(kind,index) {
+  const {input,menu}=lookupParts(kind);
+  const state=lookupState[kind];
+  const entries=[...menu.querySelectorAll('[role="option"]')];
+  if(!entries.length)return;
+  const next=Math.max(0,Math.min(index,entries.length-1));
+  state.activeIndex=next;
+  for(const [i,entry] of entries.entries()) {
+    entry.classList.toggle("active",i===next);
+    entry.setAttribute("aria-selected",String(i===next));
+  }
+  input.setAttribute("aria-activedescendant",entries[next].id);
+  entries[next].scrollIntoView({block:"nearest"});
+}
+function showLookup(kind,{browse=false}={}) {
+  const {input,menu,items}=lookupParts(kind),state=lookupState[kind];
+  const chosen=lookupParts(kind).select.value;
+  const query=browse ? "" : input.value.trim();
+  const results=getLookupMatches(items,kind,query,50);
+  menu.replaceChildren();
+  state.open=true;
+  state.activeIndex=-1;
+  state.choices=[];
+  input.setAttribute("aria-expanded","true");
+  input.removeAttribute("aria-activedescendant");
+  const entries=[];
+  // Make "All" a real option so clearing a filter is always discoverable.
+  entries.push({value:"",displayLabel:kind==="department"?"全部系所":"全部教室",count:null});
+  entries.push(...results);
+  entries.forEach((item,i)=>{
+    const option=document.createElement("button");
+    option.id=kind+"LookupOption-"+i;
+    option.type="button";
+    option.className="lookup-option";
+    option.setAttribute("role","option");
+    option.setAttribute("aria-selected","false");
+    if(String(item.value)===String(chosen))option.classList.add("is-selected");
+    const label=document.createElement("span");
+    label.className="lookup-option-main";
+    label.textContent=item.displayLabel;
+    option.append(label);
+    if(item.value) {
+      const detail=document.createElement("span");
+      detail.className="lookup-option-detail";
+      const parts=[];
+      if(kind==="department")parts.push("代碼 "+item.value);
+      if(kind==="room" && /^\d{1,2}$/.test(item.value))parts.push("未標準化代碼");
+      if(Number.isFinite(Number(item.count)))parts.push(item.count+" 門");
+      detail.textContent=parts.join(" · ");
+      option.append(detail);
+    }
+    option.addEventListener("pointerdown",(event)=>event.preventDefault());
+    option.addEventListener("click",()=>chooseLookup(kind,item));
+    option.addEventListener("mouseenter",()=>highlightLookup(kind,i));
+    menu.append(option);
+  });
+  state.choices=entries;
+  if(!results.length && query) {
+    const empty=document.createElement("p");
+    empty.className="lookup-empty";
+    empty.textContent="找不到符合的"+(kind==="department"?"系所":"教室")+"，請試其他關鍵字。";
+    menu.append(empty);
+  } else if(results.length===50) {
+    const note=document.createElement("p");
+    note.className="lookup-footnote";
+    note.textContent="只顯示前 50 筆；輸入名稱或代碼可縮小範圍";
+    menu.append(note);
+  }
+  menu.classList.remove("hidden");
+}
+function fillLookupOptions() {
+  // No datalist: its native popup duplicated the department code and cannot
+  // be styled or reliably navigated by keyboard across browsers.
+  hideLookup("department");
+  hideLookup("room");
+  updateLookupValue("department");
+  updateLookupValue("room");
+}
+function installLookup(kind) {
+  const {input,field}=lookupParts(kind);
+  const toggle=kind==="department" ? $("#departmentLookupToggle") : $("#roomLookupToggle");
+  input.addEventListener("focus",()=>showLookup(kind));
+  input.addEventListener("input",()=>{
+    if(lookupParts(kind).select.value) {
+      lookupParts(kind).select.value="";
+      if(kind==="department") {
+        selectedGrades.clear();
+        $("#classSelect").value="";
+        refreshLinkedOptions();
+      }
+      queueSearch();
+    }
+    showLookup(kind);
+  });
+  input.addEventListener("keydown",(event)=>{
+    if(event.key==="ArrowDown" || event.key==="ArrowUp") {
+      event.preventDefault();
+      if(!lookupState[kind].open)showLookup(kind);
+      const state=lookupState[kind];
+      highlightLookup(kind,state.activeIndex+(event.key==="ArrowDown"?1:-1));
+    } else if(event.key==="Enter" && lookupState[kind].open) {
+      event.preventDefault();
+      const state=lookupState[kind];
+      let item=state.choices[state.activeIndex];
+      if(!item) {
+        const query=input.value.trim().toLowerCase();
+        item=state.choices.find((choice)=>choice.value && [
+          String(choice.value).toLowerCase(),String(choice.displayLabel).toLowerCase()
+        ].includes(query));
+      }
+      if(item)chooseLookup(kind,item);
+    } else if(event.key==="Escape" && lookupState[kind].open) {
+      event.preventDefault();
+      hideLookup(kind,{restore:true});
+    }
+  });
+  toggle.addEventListener("click",()=>{
+    const isOpen=lookupState[kind].open;
+    if(isOpen)hideLookup(kind,{restore:true});
+    else {input.focus();showLookup(kind,{browse:true});}
+  });
+  input.addEventListener("blur",()=>{
+    // Delay is unnecessary: option pointerdown retains focus until click.
+    if(!field.contains(document.activeElement))hideLookup(kind,{restore:true});
+  });
+}
+for(const kind of ["department","room"])installLookup(kind);
+document.addEventListener("pointerdown",(event)=>{
+  for(const kind of ["department","room"]) {
+    if(!lookupParts(kind).field.contains(event.target))hideLookup(kind,{restore:true});
+  }
+});
 
 async function refreshLinkedOptions() {
   if (!facets.grades) return;
@@ -650,19 +785,6 @@ for (const selector of ["#teacherInput", "#prerequisiteInput"]) {
   $(selector).addEventListener("input", () => queueSearch(350));
 }
 $("#searchInput").addEventListener("input", () => queueSearch(350));
-for (const kind of ["department", "room"]) {
-  const input = kind === "department" ? $("#departmentLookup") : $("#roomLookup");
-  input.addEventListener("input", () => commitLookup(kind));
-  input.addEventListener("change", () => commitLookup(kind, true));
-  input.addEventListener("blur", () => {
-    commitLookup(kind, true);
-    const select = kind === "department" ? $("#departmentSelect") : $("#roomSelect");
-    if (!select.value && input.value.trim()) {
-      input.value = "";
-      input.title = "請從清單選擇有效的條件";
-    }
-  });
-}
 $("#allCoursesTab").addEventListener("click", () => { viewMode = "all"; search({ resetPage: true }); });
 $("#favoritesTab").addEventListener("click", () => { viewMode = "favorites"; search({ resetPage: true }); });
 $("#conflictFreeBtn").addEventListener("click", () => { avoidConflicts = !avoidConflicts; search({ resetPage: true }); });
