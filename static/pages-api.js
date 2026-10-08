@@ -133,6 +133,33 @@
     });
   }
 
+  function filterOptions(courses, params) {
+    const department = (params.get('department') || '').toLowerCase();
+    const division = (params.get('division') || '').toLowerCase();
+    const study = params.get('study_level') || '';
+    const grades = new Set((params.get('grades') || '').split(',').map(Number).filter((value) => Number.isInteger(value) && value >= 1 && value <= 8));
+    const scoped = courses.filter((course) =>
+      (!department || text(course.department_code).toLowerCase() === department || text(course.department).toLowerCase() === department)
+      && (!division || text(course.division).toLowerCase() === division)
+      && (!study || course.study_level === study)
+    );
+    function options(values, label) {
+      const counts = new Map();
+      for (const value of values) {
+        if (value === null || value === undefined || String(value).trim() === '') continue;
+        const key = String(value).trim();
+        counts.set(key, (counts.get(key) || 0) + 1);
+      }
+      return [...counts].sort((a, b) => a[0].localeCompare(b[0], 'zh-Hant', { numeric: true }))
+        .map(([value, count]) => ({ value, label: label ? label(value) : value, count }));
+    }
+    return {
+      grades: options(scoped.map((course) => course.grade), (value) => `${value} 年級`),
+      classes: options(scoped.filter((course) => !grades.size || grades.has(Number(course.grade)))
+        .map((course) => course.class_group)),
+    };
+  }
+
   function searchCourses(courses, params) {
     const q = (params.get('q') || '').trim();
     const department = text(params.get('department'));
@@ -152,6 +179,10 @@
     const prerequisite = text(params.get('prerequisite'));
     const weekday = n(params.get('weekday'));
     const grade = n(params.get('grade'));
+    const selectedGrades = new Set([...commaSet(params.get('grades'))].map(Number).filter((value) => Number.isInteger(value) && value >= 1 && value <= 8));
+    if (!selectedGrades.size && grade) selectedGrades.add(grade);
+    const selectedDays = new Set([...commaSet(params.get('weekdays'))].map(Number).filter((value) => Number.isInteger(value) && value >= 1 && value <= 7));
+    if (!selectedDays.size && weekday) selectedDays.add(weekday);
     const section = (params.get('section') || '').toUpperCase();
     const selectedSections = commaSet(params.get('sections'), true);
     const selectedTags = commaSet(params.get('course_tag'));
@@ -182,7 +213,7 @@
         && text(course.department_code) !== department
         && text(course.department) !== department
       ) continue;
-      if (grade && course.grade !== grade) continue;
+      if (selectedGrades.size && !selectedGrades.has(Number(course.grade))) continue;
       if (division && text(course.division) !== division) continue;
       if (studyLevel && course.study_level !== studyLevel) continue;
       if (required && text(course.required_elective) !== required) continue;
@@ -195,12 +226,12 @@
         (m.sections || []).some((s) => excludedSlots.has(`${m.weekday}:${String(s).toUpperCase()}`))
       )) continue;
       if (room && !meetings.some((m) => text(m.room) === room)) continue;
-      if (weekday && !meetings.some((m) => m.weekday === weekday)) continue;
-      if (section && !meetings.some((m) => (m.sections || []).includes(section))) continue;
-      if (selectedSections.size) {
-        const actual = new Set(meetings.flatMap((m) => m.sections || []));
-        if (![...selectedSections].some((s) => actual.has(s))) continue;
-      }
+      const requestedSections = new Set(selectedSections);
+      if (section) requestedSections.add(section);
+      if ((selectedDays.size || requestedSections.size) && !meetings.some((m) =>
+        (!selectedDays.size || selectedDays.has(m.weekday))
+        && (!requestedSections.size || (m.sections || []).some((value) => requestedSections.has(value)))
+      )) continue;
       if (!matchesTime(course, timeOfDay, includeUnknown)) continue;
       if (schedule === 'known' && !meetings.length) continue;
       if (schedule === 'unknown' && meetings.length) continue;
@@ -251,6 +282,7 @@
       const data = await loadDataset();
       if (path === '/api/meta') return jsonResponse(data.meta);
       if (path === '/api/facets') return jsonResponse(data.facets);
+      if (path === '/api/filter-options') return jsonResponse(filterOptions(data.courses, url.searchParams));
       if (path === '/api/index/status') {
         return jsonResponse({
           running: false,
