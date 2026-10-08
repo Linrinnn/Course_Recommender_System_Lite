@@ -38,7 +38,7 @@ function saveState() {
   try { localStorage.setItem(stateKey,JSON.stringify(state)); }
   catch { notify("儲存失敗：瀏覽器空間不足。請先匯出 JSON 備份。"); }
 }
-function activateTerm(metaData) {
+function activateTerm(metaData, {persist=true}={}) {
   activeTerm=termKey(metaData.academic_year,metaData.semester);
   state.academicYear=metaData.academic_year;
   state.semester=metaData.semester;
@@ -50,7 +50,7 @@ function activateTerm(metaData) {
     state.activePlanId=id;
     notify("已建立此學期的新課表。之前學期的課表仍保存在瀏覽器及 JSON 備份中。");
   } else if (!inTerm.some(p=>p.id===state.activePlanId)) state.activePlanId=inTerm[0].id;
-  saveState();
+  if(persist)saveState();
 }
 function termPlans() { return state.plans.filter(p=>!activeTerm || !p.termKey || p.termKey===activeTerm); }
 function activePlan() {
@@ -474,7 +474,10 @@ $("#clearPlanBtn").addEventListener("click",()=>{
   activePlan().courses=[];saveState();renderAll();if(slot)renderSlotResults();
 });
 $("#backToSearchBtn").addEventListener("click",()=>{
-  if(window.opener && !window.opener.closed)window.opener.focus();
+  if(window.parent!==window) {
+    try { window.parent.document.getElementById("scheduleModal")?.close();return; } catch {}
+  }
+  if(window.opener && !window.opener.closed) {window.opener.focus();window.close();}
   else location.href="./";
 });
 $("#viewMode").addEventListener("change",ev=>{ui.mode=ev.target.value;renderTimetable();});
@@ -528,7 +531,7 @@ $("#slotPrevBtn").addEventListener("click",()=>{if(slotPage>1){slotPage--;search
 $("#slotNextBtn").addEventListener("click",()=>{if(slotPage<slotTotalPages){slotPage++;searchSlot();}});
 window.addEventListener("storage",ev=>{
   if(ev.key!==stateKey)return;
-  state=loadState();if(meta)activateTerm(meta);renderAll();if(slot)renderSlotResults();
+  state=loadState();if(meta)activateTerm(meta,{persist:false});renderAll();if(slot)renderSlotResults();
 });
 for(let day=1;day<=7;day++)$("#busyDay").append(new Option(timeLabel(day),String(day)));
 for(const section of sectionOrder)for(const id of ["#busyStart","#busyEnd"]){
