@@ -1106,3 +1106,108 @@ dialog.detail-dialog .detail-grid dd { font-size: .88rem; line-height: 1.7; colo
   outline: 2px solid #5e977e;
   outline-offset: 3px;
 }
+
+
+/* Accessible filter menus: replace unstyleable native datalist overlays. */
+.product-shell .lookup-field {
+  position: relative;
+  display: block;
+  isolation: isolate;
+}
+.product-shell .lookup-field > label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: .76rem;
+  font-weight: 650;
+  color: #5e6d65;
+}
+.product-shell .lookup-input-row {
+  display: flex;
+  align-items: center;
+  position: relative;
+  min-width: 0;
+  background: #fff;
+  border: 1px solid #dfe5df;
+  border-radius: 7px;
+}
+.product-shell .lookup-input-row:focus-within {
+  outline: 2px solid rgba(42,103,81,.16);
+  border-color: #80a99a;
+}
+.product-shell .lookup-input-row input {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  height: 38px;
+  min-height: 38px;
+  padding: 6px 8px 6px 11px;
+  color: #253c30;
+  border: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+.product-shell .lookup-input-row input:focus { outline: 0 !important; box-shadow: none !important; }
+.product-shell .lookup-toggle {
+  border: 0;
+  border-left: 1px solid #eef1ec;
+  background: transparent;
+  color: #728378;
+  border-radius: 0 6px 6px 0;
+  height: 32px;
+  min-width: 32px;
+  font-size: 1.18rem;
+  line-height: 1;
+  padding: 0;
+}
+.product-shell .lookup-toggle:hover { background: #f0f5f1; color: #245c4f; filter: none; }
+.product-shell .lookup-menu {
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 0;
+  right: 0;
+  z-index: 90;
+  display: grid;
+  gap: 2px;
+  overflow: auto;
+  max-height: min(330px, calc(100dvh - 155px));
+  padding: 6px;
+  border: 1px solid #dae5dc;
+  border-radius: 9px;
+  background: #fff;
+  box-shadow: 0 12px 34px rgba(18,38,23,.16);
+  scrollbar-width: thin;
+}
+.product-shell .lookup-menu.lookup-up { top: auto; bottom: calc(100% + 5px); }
+.product-shell .lookup-option {
+  display: grid;
+  align-items: center;
+  text-align: left;
+  gap: 1px;
+  width: 100%;
+  min-height: 40px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #2d3f32;
+  font-weight: 570;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.product-shell .lookup-option:hover,
+.product-shell .lookup-option.active { background: #eef5f0; color: #245c4f; filter: none; }
+.product-shell .lookup-option.is-selected { background: #f2f7f3; }
+.lookup-option-main { font-size: .81rem; line-height: 1.45; }
+.lookup-option-detail { font-size: .69rem; color: #8a9a8e; font-weight: 450; line-height: 1.25; }
+.lookup-empty, .lookup-footnote { margin: 5px 7px; color: #86948b; line-height: 1.45; font-size: .72rem; }
+.product-shell .rail-brand { border: none; padding: 0; background: transparent; overflow: visible; }
+.product-shell .rail-brand > img { width: 42px; height: 42px; display: block; border-radius: 11px; }
+.schedule-brand { display: grid; place-items: center; flex: 0 0 42px; }
+.schedule-brand > img { width: 42px; height: 42px; border-radius: 11px; display: block; }
+.filter-explainer { color:#8b978d; font-size:.69rem; line-height:1.5; padding-top:3px; }
+@media(max-width: 680px) {
+  .schedule-brand { flex-basis: 36px; }
+  .schedule-brand > img { width: 36px; height: 36px; }
+}
