@@ -87,6 +87,7 @@ class UIWorkspaceTests(unittest.TestCase):
             "removeCourseBtn", "replaceCourseBtn", "undoBtn", "clonePlanBtn",
             "exportPngBtn", "exportIcsBtn", "printPdfBtn", "exportBackupBtn",
             "importBackupBtn", "backupFile", "comparePlanSelect", "comparePlanBtn",
+            "checkCourseChangesBtn", "courseChangeResults",
         ):
             self.assertIn(required, parsed.ids)
         self.assertIn('src="/static/schedule.js"', html)
