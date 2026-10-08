@@ -343,6 +343,10 @@ function showLookup(kind,{browse=false}={}) {
     menu.append(note);
   }
   menu.classList.remove("hidden");
+  const box=lookupParts(kind).field.getBoundingClientRect();
+  const below=window.innerHeight-box.bottom;
+  const above=box.top;
+  menu.classList.toggle("lookup-up",below<245 && above>below);
 }
 function fillLookupOptions() {
   // No datalist: its native popup duplicated the department code and cannot
