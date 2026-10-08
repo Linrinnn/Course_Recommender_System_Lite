@@ -443,6 +443,67 @@ async function showDetail(course) {
   try { const response = await fetch(`/api/course/${encodeURIComponent(course.id)}`); const detail = await response.json(); if (!response.ok) throw new Error(detail.detail || "完整資料載入失敗"); renderDetail(detail); if (!course.detail_indexed) { await loadMetaAndFacets({ preserveValues: true }); await search({ updateUrl: false }); } }
   catch (error) { $("#detailContent").innerHTML = `<div class="status">${escapeHtml(error.message)}</div>`; }
 }
+function renderComparison() {
+  const container = $("#compareContent");
+  container.replaceChildren();
+  if (comparedCourses.length < 2) return;
+  const table = document.createElement("table");
+  table.className = "comparison-table";
+  const fields = [
+    ["課號", (c) => c.course_code || "—"],
+    ["教師", (c) => c.teacher || "—"],
+    ["系所", (c) => c.department || "—"],
+    ["年級", (c) => c.grade ? `${c.grade} 年級` : "—"],
+    ["學分", (c) => c.credits_number ?? "—"],
+    ["必／選修", (c) => c.required_elective || "—"],
+    ["時間／教室", (c) => meetingLabel(c)],
+    ["互相衝堂", (c) => {
+      const conflicting = comparedCourses.filter((other) => other.id !== c.id && conflict(c, other));
+      return conflicting.length ? conflicting.map((other) => other.name).join("、") : "無";
+    }],
+  ];
+  const header = document.createElement("tr");
+  const first = document.createElement("th");
+  first.textContent = "比較項目";
+  header.append(first);
+  for (const course of comparedCourses) {
+    const cell = document.createElement("th");
+    const title = document.createElement("div");
+    title.className = "comparison-course-title";
+    title.textContent = course.name || "未命名課程";
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "comparison-remove";
+    remove.textContent = "移除比較";
+    remove.addEventListener("click", () => {
+      comparedCourses = comparedCourses.filter((item) => item.id !== course.id);
+      if (comparedCourses.length < 2) $("#compareDialog").close();
+      renderComparison();
+      renderCourses();
+    });
+    cell.append(title, remove);
+    header.append(cell);
+  }
+  const thead = document.createElement("thead");
+  thead.append(header);
+  table.append(thead);
+  const tbody = document.createElement("tbody");
+  for (const [label, format] of fields) {
+    const row = document.createElement("tr");
+    const heading = document.createElement("th");
+    heading.textContent = label;
+    row.append(heading);
+    for (const course of comparedCourses) {
+      const cell = document.createElement("td");
+      cell.textContent = String(format(course));
+      row.append(cell);
+    }
+    tbody.append(row);
+  }
+  table.append(tbody);
+  container.append(table);
+}
+
 function resetFilters({ searchNow = true } = {}) {
   for (const selector of ["#searchInput", "#teacherInput", "#prerequisiteInput"]) $(selector).value = "";
   for (const selector of ["#departmentSelect", "#weekdaySelect", "#sectionSelect", "#roomSelect", "#creditsSelect", "#reqSelect", "#divisionSelect", "#gradeSelect", "#studyLevelSelect", "#courseTagSelect", "#classSelect", "#teachingLanguageSelect", "#materialLanguageSelect", "#teachingMethodSelect", "#assessmentSelect", "#relationSelect"]) $(selector).value = "";
@@ -470,13 +531,64 @@ desktopQuery.addEventListener("change", (event) => {
   if (event.matches) setFilterPanelOpen(false, { restoreFocus: false });
 });
 
+$("#allCoursesTab").addEventListener("click", () => { viewMode = "all"; search({ resetPage: true }); });
+$("#favoritesTab").addEventListener("click", () => { viewMode = "favorites"; search({ resetPage: true }); });
+$("#conflictFreeBtn").addEventListener("click", () => { avoidConflicts = !avoidConflicts; search({ resetPage: true }); });
+$("#compareOpenBtn").addEventListener("click", () => {
+  if (comparedCourses.length < 2) return;
+  renderComparison();
+  $("#compareDialog").showModal();
+});
+$("#closeCompareBtn").addEventListener("click", () => $("#compareDialog").close());
+$("#compareDialog").addEventListener("click", (event) => {
+  if (event.target === $("#compareDialog")) $("#compareDialog").close();
+});
+$("#copyCompareBtn").addEventListener("click", async () => {
+  const lines = comparedCourses.map((course) =>
+    [course.name, course.course_code, course.teacher, `${course.credits_number ?? "—"}學分`, meetingLabel(course)].join("｜")
+  );
+  try {
+    await navigator.clipboard.writeText(lines.join("\n"));
+    $("#copyCompareBtn").textContent = "已複製";
+  } catch {
+    window.prompt("複製比較摘要", lines.join("\n"));
+  }
+});
+$("#saveViewBtn").addEventListener("click", saveCurrentView);
+$("#savedViewsSelect").addEventListener("change", (event) => {
+  $("#deleteViewBtn").disabled = !event.target.value;
+  if (event.target.value) applySavedView(event.target.value);
+});
+$("#deleteViewBtn").addEventListener("click", deleteSavedView);
+document.addEventListener("keydown", (event) => {
+  const target = event.target;
+  if (event.key === "/" && !event.ctrlKey && !event.metaKey && !event.altKey
+    && !["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName)) {
+    event.preventDefault();
+    $("#searchInput").focus();
+  }
+});
 $("#searchBtn").addEventListener("click", () => search({ resetPage: true }));
 $("#applyFiltersBtn").addEventListener("click", () => { setFilterPanelOpen(false, { restoreFocus: false }); search({ resetPage: true }); });
-$("#resetFiltersBtn").addEventListener("click", resetFilters);
+$("#resetFiltersBtn").addEventListener("click", () => resetFilters());
 $("#openScheduleBtn").addEventListener("click", openSchedule);
 $("#prevPageBtn").addEventListener("click", () => { if (currentPage > 1) { currentPage -= 1; search(); } }); $("#nextPageBtn").addEventListener("click", () => { if (currentPage < totalPages) { currentPage += 1; search(); } }); $("#searchInput").addEventListener("keydown", (event) => { if (event.key === "Enter") search({ resetPage: true }); });
 $("#closeDetailBtn").addEventListener("click", () => $("#detailDialog").close()); $("#detailDialog").addEventListener("click", (event) => { if (event.target === $("#detailDialog")) $("#detailDialog").close(); });
 $("#refreshBtn").addEventListener("click", async () => { $("#refreshBtn").disabled = true; try { const response = await fetch("/api/refresh", { method: "POST" }); const data = await response.json(); if (!response.ok) throw new Error(data.detail || "更新失敗"); await loadMetaAndFacets({ preserveValues: true }); await search({ updateUrl: false }); } catch (error) { window.alert(error.message); } finally { $("#refreshBtn").disabled = false; } });
-window.addEventListener("storage", (event) => { if (event.key === stateKey) { state = loadState(); updateScheduleCount(); renderCourses(); } });
+window.addEventListener("storage", (event) => {
+  if (event.key === stateKey) {
+    state = loadState();
+    updateScheduleCount();
+    if (avoidConflicts) search({ resetPage: true }); else renderCourses();
+  }
+  if (event.key === favoriteKey) {
+    favoriteCourses = loadLocalList(favoriteKey);
+    if (viewMode === "favorites") search({ updateUrl: false }); else renderCourses();
+  }
+  if (event.key === viewKey) {
+    savedViews = loadLocalList(viewKey);
+    renderSavedViews();
+  }
+});
 
 try { await loadMetaAndFacets(); updateScheduleCount(); await search({ updateUrl: false }); } catch (error) { $("#status").textContent = error.message; }
