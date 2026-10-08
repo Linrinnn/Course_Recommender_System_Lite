@@ -43,9 +43,9 @@ class UIWorkspaceTests(unittest.TestCase):
             "resultCount", "pageText", "status", "detailDialog", "detailTitle",
             "detailContent", "closeDetailBtn", "enrichedCoverageText",
             "favoriteCount", "favoritesTab", "allCoursesTab", "conflictFreeBtn",
-            "compareOpenBtn", "compareCount", "compareDialog", "compareContent",
-            "closeCompareBtn", "copyCompareBtn", "savedViewsSelect",
-            "saveViewBtn", "deleteViewBtn",
+            "gradeChips", "weekdayChips", "classSelect", "studyLevelSelect",
+            "divisionSelect", "departmentLookup", "departmentSuggestions",
+            "roomLookup", "roomSuggestions",
         }
         self.assertFalse(required.difference(parsed.ids))
         self.assertEqual(parsed.tag_by_id["filterPanel"], "aside")
@@ -53,7 +53,12 @@ class UIWorkspaceTests(unittest.TestCase):
         self.assertEqual(parsed.tag_by_id["mobileFiltersBtn"], "button")
         self.assertIn('class="workspace-layout"', html)
         self.assertIn('class="favorite-btn"', html)
-        self.assertIn('class="compare-btn secondary"', html)
+        self.assertNotIn('class="compare-btn secondary"', html)
+        self.assertNotIn('id="compareDialog"', html)
+        self.assertNotIn('id="savedViewsSelect"', html)
+        self.assertIn('id="gradeChips"', html)
+        self.assertIn('id="weekdayChips"', html)
+        self.assertIn('id="roomLookup"', html)
 
     def test_schedule_preserves_slot_controls(self):
         html = (STATIC / "schedule.html").read_text(encoding="utf-8")
