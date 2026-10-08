@@ -172,3 +172,11 @@
   .timetable-v2 .timetable th,.timetable-v2 .timetable td {padding:2px;}
   .timetable-v2 .timetable tr {break-inside:avoid;}
 }
+
+.timetable-v2 .change-check-toolbar {display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:13px 0;}
+.timetable-v2 .change-check-toolbar button {font-size:.78rem;padding:8px 10px;}
+.timetable-v2 .course-change-results {border:1px solid #e4ebe5;background:#fafcf9;border-radius:6px;padding:11px;font-size:.78rem;display:grid;gap:8px;}
+.timetable-v2 .course-change-results p {margin:0;}
+.timetable-v2 .course-change-results small {color:#8a988e;}
+.timetable-v2 .course-change-row {display:flex;align-items:center;justify-content:space-between;gap:9px;padding:8px;border:1px solid #edf1ed;border-radius:5px;}
+.timetable-v2 .course-change-row button {font-size:.73rem;padding:6px 9px;white-space:nowrap;}
