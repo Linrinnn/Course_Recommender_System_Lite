@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import math
 import os
+import re
 import time
 from collections import Counter
 from pathlib import Path
@@ -277,6 +278,7 @@ async def courses(
     section: str = Query("", max_length=20),
     sections: str = Query("", max_length=200),
     room: str = Query("", max_length=80),
+    exclude_slots: str = Query("", max_length=1600),
     time_of_day: str = Query("all", pattern="^(all|daytime|evening|weekday_evening_or_saturday)$"),
     include_unknown_schedule: bool = Query(True),
     min_credits: float | None = Query(None, ge=0, le=30),
@@ -305,6 +307,11 @@ async def courses(
     items = await _load_courses()
     query = q.strip()
     selected_sections = _comma_set(sections, upper=True)
+    excluded_slots = {
+        part
+        for value in exclude_slots.split(",")
+        if (part := value.strip().upper()) and re.fullmatch(r"[1-7]:[A-Z][A-Z0-9]?", part)
+    }
     selected_tags = _comma_set(course_tag)
     selected_methods = _comma_set(teaching_method)
     selected_assessments = _comma_set(assessment)
@@ -339,6 +346,11 @@ async def courses(
         if class_group and class_group.casefold() not in course.get("class_group", "").casefold():
             continue
         meetings = course.get("meetings") or []
+        if excluded_slots and any(
+            f"{meeting.get('weekday')}:{str(section).upper()}" in excluded_slots
+            for meeting in meetings for section in meeting.get("sections") or []
+        ):
+            continue
         if room and not any(
             str(meeting.get("room") or "").casefold() == room.casefold()
             for meeting in meetings
