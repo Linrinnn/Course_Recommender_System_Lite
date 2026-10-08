@@ -21,14 +21,6 @@
     const departmentLabel = departmentSelect?.closest('label')?.querySelector('span');
     setText(departmentLabel, '系所代碼');
 
-    const scheduleButton = document.querySelector('#openScheduleBtn');
-    if (scheduleButton && !scheduleButton.firstChild?.textContent?.includes('查看課表')) {
-      const count = document.querySelector('#scheduleCount')?.textContent || '0';
-      scheduleButton.innerHTML = `查看課表 <span id="scheduleCount">${count}</span>`;
-    }
-
-    const refreshButton = document.querySelector('#refreshBtn');
-    setText(refreshButton, '重新載入資料');
   }
 
   document.addEventListener('DOMContentLoaded', () => {
