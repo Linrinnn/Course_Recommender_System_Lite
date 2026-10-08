@@ -509,6 +509,19 @@ async def courses(
     }
 
 
+@app.get("/api/course-summary/{course_id}")
+async def course_summary(course_id: str) -> dict[str, Any]:
+    """Read a basic record from the last synchronized catalog; no live detail indexing."""
+    items = await _load_courses()
+    course = next((item for item in items if str(item.get("id")) == course_id), None)
+    if not course:
+        raise HTTPException(status_code=404, detail="目前課程快照中找不到此課")
+    return {key: course.get(key) for key in (
+        "id", "name", "course_code", "teacher", "department", "class_group",
+        "credits_number", "outline_url", "meetings",
+    )}
+
+
 @app.get("/api/course/{course_id}")
 async def course_detail(course_id: str, refresh: bool = False) -> dict[str, Any]:
     items = await _load_courses()
