@@ -7,17 +7,36 @@
   <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
-  <main class="shell">
+  <main class="shell product-shell">
+    <nav class="app-rail" aria-label="主要導覽">
+      <div class="rail-brand" aria-label="輔大選課">F<span>輔大選課</span></div>
+      <div class="rail-navigation">
+        <button type="button" id="allCoursesTab" class="rail-item selected" aria-pressed="true">
+          <span class="rail-icon" aria-hidden="true">⌕</span><span class="rail-label">探索課程</span>
+        </button>
+        <button type="button" id="favoritesTab" class="rail-item" aria-pressed="false">
+          <span class="rail-icon" aria-hidden="true">☆</span><span class="rail-label">我的收藏</span>
+          <span id="favoriteCount" class="rail-count">0</span>
+        </button>
+        <button type="button" id="openScheduleBtn" class="rail-item schedule-trigger">
+          <span class="rail-icon" aria-hidden="true">▦</span><span class="rail-label">我的課表</span>
+          <span id="scheduleCount" class="rail-count">0</span>
+        </button>
+      </div>
+      <div class="rail-bottom"><span class="rail-online-indicator" aria-hidden="true"></span> 課綱資料</div>
+    </nav>
+    <div class="app-content">
     <header class="hero">
       <div class="hero-identity">
         <div class="hero-copy">
-          <h1>輔大選課</h1>
+          <div class="hero-breadcrumb">課程管理 <span aria-hidden="true">/</span> <strong>探索</strong></div>
+          <h1>課程探索</h1>
           <p id="termText" class="muted small">讀取學期資料中…</p>
         </div>
       </div>
       <div class="hero-actions">
-        <button id="refreshBtn" class="text-btn" title="重新讀取課程資料">重新載入</button>
-        <button id="openScheduleBtn" class="schedule-trigger">我的課表 <span id="scheduleCount">0</span></button>
+        <span class="header-help">挑選課程，安排你的一週。</span>
+        <button id="refreshBtn" class="text-btn" title="重新讀取課程資料">↻ <span>重新整理</span></button>
       </div>
     </header>
 
@@ -26,11 +45,12 @@
     <aside class="panel search-panel" id="filterPanel" aria-label="課程篩選條件">
       <div class="filter-heading">
         <div>
-          <h2>篩選</h2>
+          <div class="filter-eyebrow">FILTERS</div>
+          <h2>篩選條件</h2>
         </div>
         <button type="button" id="closeFiltersBtn" class="text-btn close-filters" aria-label="關閉篩選">✕</button>
       </div>
-      <p class="filter-intro">找出適合你的課程</p>
+      <p class="filter-intro">調整條件後將自動更新結果</p>
       <div class="quick-filter-grid">
         <label class="field"><span>系所</span>
           <input id="departmentLookup" type="search" list="departmentSuggestions" autocomplete="off" placeholder="搜尋系名或代碼" aria-label="搜尋系所" />
@@ -102,24 +122,28 @@
       </details>
 
       <div class="toolbar search-toolbar">
-        <div id="activeFilterText" class="muted small">未套用額外條件</div>
-        <div class="toolbar-actions"><button id="resetFiltersBtn" class="secondary">清除條件</button><button id="applyFiltersBtn">套用篩選</button></div>
+        <div class="toolbar-actions"><button id="resetFiltersBtn" class="secondary">清除全部</button><button id="applyFiltersBtn">查看結果</button></div>
       </div>
     </aside>
 
     <section class="results-column" id="resultsPanel" aria-label="搜尋結果">
       <div class="search-primary">
-        <label class="field search-field">
-          <span>快速搜尋</span>
-          <input id="searchInput" type="search" placeholder="搜尋課程名稱、教師、課號、系所…" autocomplete="off" />
-        </label>
-        <button id="searchBtn">搜尋課程</button>
+        <div class="search-input-wrap">
+          <span class="search-icon" aria-hidden="true">⌕</span>
+          <label class="field search-field">
+            <span>快速搜尋</span>
+            <input id="searchInput" type="search" placeholder="搜尋課名、課號、教師或系所" autocomplete="off" />
+          </label>
+          <kbd class="search-shortcut" aria-label="快速搜尋快捷鍵">/</kbd>
+        </div>
+        <button id="searchBtn">搜尋</button>
       </div>
       <div class="results-head">
         <div class="results-title">
+          <span class="section-kicker">COURSES</span>
           <div class="results-title-line">
-            <h2>課程</h2>
-            <span id="resultCount" class="muted small"></span>
+            <h2 id="resultsHeading">課程列表</h2>
+            <span id="resultCount" class="results-count muted small"></span>
           </div>
         </div>
         <div class="results-tools">
@@ -128,25 +152,32 @@
         </div>
       </div>
       <div class="course-view-toolbar">
-        <div class="view-tabs" role="group" aria-label="課程檢視">
-          <button id="allCoursesTab" class="view-tab selected" type="button" aria-pressed="true">全部課程</button>
-          <button id="favoritesTab" class="view-tab" type="button" aria-pressed="false">我的收藏 <span id="favoriteCount">0</span></button>
+        <div class="active-filters-wrap">
+          <span class="summary-dot" aria-hidden="true"></span>
+          <span id="activeFilterText" class="muted small">尚未套用篩選條件</span>
         </div>
         <div class="view-actions">
-          <button type="button" id="conflictFreeBtn" class="quiet-action" aria-pressed="false" title="依照目前課表排除衝堂課程">避開衝堂</button>
-          
+          <button type="button" id="conflictFreeBtn" class="quiet-action" aria-pressed="false" title="排除與目前課表衝堂的課程">避免衝堂</button>
         </div>
+      </div>
+      <div class="course-list-head" aria-hidden="true">
+        <span>課程資訊</span><span>授課教師</span><span>上課時間與教室</span><span>學分</span><span class="head-actions">操作</span>
       </div>
       <div id="viewMessage" class="view-message hidden" role="status"></div>
       <div id="status" class="status">載入中…</div>
       <div id="courseList" class="course-list"></div>
     </section>
     </div>
+    </div>
   </main>
 
   <dialog id="detailDialog" class="detail-dialog">
     <div class="detail-dialog-inner">
-      <div class="section-head"><h2 id="detailTitle">課程完整資料</h2><button id="closeDetailBtn" class="secondary">關閉</button></div>
+      <div class="section-head">
+        <div class="detail-head-label"><span class="section-kicker">COURSE DETAILS</span><h2 id="detailTitle">課程完整資料</h2></div>
+        <button id="closeDetailBtn" class="secondary detail-close" aria-label="關閉詳情面板">✕</button>
+      </div>
+      <div class="detail-actions"><a id="detailOfficialLink" class="detail-official-link" target="_blank" rel="noopener">在輔大官方課綱查看 ↗</a></div>
       <div id="detailContent" class="detail-content"></div>
     </div>
   </dialog>
@@ -157,15 +188,22 @@
         <div class="title-row">
           <button type="button" class="favorite-btn" aria-label="加入收藏" aria-pressed="false" title="收藏這門課">☆</button>
           <h3 class="course-name"></h3>
-          <span class="badge req-badge"></span>
-          <span class="badge index-badge"></span>
         </div>
         <p class="course-name-en muted small"></p>
         <p class="course-meta"></p>
-        <p class="meeting-text"></p>
-        <div class="course-tags"></div>
+        <div class="course-tags"><span class="badge req-badge"></span><span class="badge index-badge"></span></div>
       </div>
-      <div class="course-actions"><a class="outline-link" target="_blank" rel="noopener">官方課綱</a><button class="detail-btn secondary">完整資料</button><button class="add-btn">加入課表</button></div>
+      <div class="course-teacher-cell">
+        <span class="course-teacher"></span>
+        <span class="course-class-label"></span>
+      </div>
+      <div class="course-time-cell"><span class="meeting-text"></span></div>
+      <div class="course-credit-cell"><span class="course-credits"></span></div>
+      <div class="course-actions">
+        <button class="detail-btn secondary" title="查看課程詳細資料">詳情</button>
+        <a class="outline-link" target="_blank" rel="noopener" title="開啟官方課綱" aria-label="開啟官方課綱">↗</a>
+        <button class="add-btn">加入</button>
+      </div>
     </article>
   </template>
 

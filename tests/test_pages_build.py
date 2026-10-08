@@ -19,6 +19,19 @@ class PagesBuildTests(unittest.TestCase):
         self.assertIn('./static/pages-api.js', out)
         self.assertIn('./static/schedule.js', out)
 
+    def test_rewrite_html_cache_busts_static_assets(self):
+        html = (
+            '<link href="/static/styles.css" rel="stylesheet">'
+            '<script src="/static/schedule-modal.js"></script>'
+            '<script type="module" src="/static/app.js"></script>'
+        )
+        with patch.dict("os.environ", {"GITHUB_SHA": "fedcba9876543210"}):
+            out = build_pages.rewrite_html(html)
+        self.assertIn('styles.css?v=fedcba987654', out)
+        self.assertIn('app.js?v=fedcba987654', out)
+        self.assertIn('pages-api.js?v=fedcba987654', out)
+        self.assertIn('pages-hotfix.js?v=fedcba987654', out)
+
     @patch(
         'build_pages.load_department_reference',
         return_value=(
