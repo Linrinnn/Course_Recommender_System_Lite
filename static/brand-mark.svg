@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="輔大選課工具">
+  <title>輔大選課工具</title>
+  <rect width="64" height="64" rx="15" fill="#245C4F"/>
+  <path d="M18 17h28M18 17v30M18 32h23" stroke="#FFF" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="34" y="38" width="7" height="7" rx="2" fill="#BCE5CE"/>
+  <rect x="44" y="38" width="7" height="7" rx="2" fill="#BCE5CE"/>
+</svg>

@@ -35,6 +35,8 @@ jobs:
       - name: Check browser JavaScript
         run: |
           node --check static/app.js
+          node --check static/filter-ui.mjs
+          node tests/test_filter_ui.mjs
           node --check static/schedule.js
           node --check static/schedule-core.mjs
           node tests/test_schedule_core.mjs

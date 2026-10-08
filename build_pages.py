@@ -221,6 +221,13 @@ def patch_static_js() -> None:
     )
     schedule_path.write_text(schedule, encoding="utf-8")
 
+    app_path = DIST / "static" / "app.js"
+    app_source = app_path.read_text(encoding="utf-8").replace(
+        'from "./filter-ui.mjs"',
+        f'from "./filter-ui.mjs?v={module_version}"',
+    )
+    app_path.write_text(app_source, encoding="utf-8")
+
 
 async def main() -> None:
     refresh_list = str(os.environ.get("FJU_REFRESH_LIST", "")).lower() in {"1", "true", "yes"}

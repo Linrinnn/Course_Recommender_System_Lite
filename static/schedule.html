@@ -4,13 +4,14 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>我的課表 | 輔大選課</title>
+  <link rel="icon" type="image/svg+xml" href="/static/brand-mark.svg"/>
   <link rel="stylesheet" href="/static/styles.css"/>
   <link rel="stylesheet" href="/static/schedule-v2.css"/>
 </head>
 <body>
 <main class="shell schedule-shell timetable-v2">
   <header class="hero">
-    <div class="hero-identity"><div class="hero-copy">
+    <div class="hero-identity"><div class="schedule-brand"><img src="/static/brand-mark.svg" width="42" height="42" alt="輔大選課工具 Logo"/></div><div class="hero-copy">
       <div class="hero-breadcrumb">課程管理 <span aria-hidden="true">/</span> <strong>我的課表</strong></div>
       <h1>我的課表</h1><p class="muted small">規劃、比較與匯出你的選課方案</p>
     </div></div>
@@ -92,10 +93,11 @@
     <section class="panel schedule-insights-panel">
       <div class="section-head"><div><h2>課表分析與方案比較</h2><p class="muted small">找出更符合時間偏好的課表</p></div></div>
       <div class="preferences">
-        <label class="check-label"><input type="checkbox" id="prefNoEarly"/>避免早八（D0–D2）</label>
+        <label class="check-label"><input type="checkbox" id="prefNoEarly"/>避免早課（D0–D2）</label>
         <label class="check-label"><input type="checkbox" id="prefNoLate"/>避免晚課（E0–E4）</label>
         <label class="check-label"><input type="checkbox" id="prefCompact"/>盡量減少空堂</label>
       </div>
+      <p class="preferences-help muted small">這三項是個人偏好：會提示課表問題，並調整「節次搜尋」當頁的排序；不會自動改動課表。</p>
       <div id="insightText" class="insight-text" role="status"></div>
       <div class="change-check-toolbar">
         <button type="button" id="checkCourseChangesBtn" class="secondary">檢查課程資料變更</button>
@@ -106,6 +108,7 @@
         <label class="field"><span>與另一方案比較</span><select id="comparePlanSelect"></select></label>
         <button id="comparePlanBtn" class="secondary">比較方案</button>
       </div>
+      <p class="plan-compare-help muted small">使用方法：① 上方點「複製方案」② 調整新方案的課程 ③ 在這裡選原方案並比較學分、空堂及衝堂。若只有一份方案，先複製才能比較。</p>
       <div id="planCompareResults" class="plan-compare-results hidden"></div>
     </section>
   </div>
