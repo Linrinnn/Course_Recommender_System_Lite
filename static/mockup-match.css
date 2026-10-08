@@ -524,3 +524,24 @@ body { color:var(--ref-ink);background:#fff; }
   }
   .shell.product-shell {padding-bottom:54px!important;}
 }
+
+
+/* Final 1672px reference alignment: 29px / 366px / 30px / 867px / 30px / 300px / 50px. */
+@media(min-width:1331px) {
+  .product-shell .workspace-layout {
+    grid-template-columns:366px minmax(0,1fr) 300px!important;
+    gap:30px!important;
+    padding:0 50px 48px 29px!important;
+  }
+}
+@media(min-width:621px) {
+  .product-shell .hero-utilities {
+    position:absolute;
+    right:10px;
+    bottom:-5px;
+    display:flex;
+    justify-content:flex-end;
+    max-width:94%;
+    margin:0;
+  }
+}
