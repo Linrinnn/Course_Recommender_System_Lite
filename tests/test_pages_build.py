@@ -1,4 +1,6 @@
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 import build_pages
@@ -31,6 +33,24 @@ class PagesBuildTests(unittest.TestCase):
         self.assertIn('app.js?v=fedcba987654', out)
         self.assertIn('pages-api.js?v=fedcba987654', out)
         self.assertIn('pages-hotfix.js?v=fedcba987654', out)
+
+    def test_nested_schedule_module_import_has_deployment_version(self):
+        with TemporaryDirectory() as folder:
+            static = Path(folder) / "static"
+            static.mkdir()
+            (static / "schedule-modal.js").write_text(
+                "frame.src = '/schedule?embed=1'", encoding="utf-8"
+            )
+            (static / "schedule.js").write_text(
+                'import { a } from "./schedule-core.mjs"; location.href = "/";',
+                encoding="utf-8",
+            )
+            with patch.object(build_pages, "DIST", Path(folder)):
+                with patch.dict("os.environ", {"GITHUB_SHA": "abc1234567890"}):
+                    build_pages.patch_static_js()
+            result = (static / "schedule.js").read_text(encoding="utf-8")
+            self.assertIn('from "./schedule-core.mjs?v=abc123456789"', result)
+            self.assertIn('location.href = "./";', result)
 
     @patch(
         'build_pages.load_department_reference',
