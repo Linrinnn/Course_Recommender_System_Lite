@@ -82,7 +82,7 @@ class UIWorkspaceTests(unittest.TestCase):
         self.assertIn('class="course-schedule-row"', html)
         self.assertIn('class="course-teacher-cell"', html)
         self.assertIn('class="course-time-cell"', html)
-        self.assertIn('class="course-credit-tag"', html)
+        self.assertIn('class="badge course-credit-tag"', html)
         self.assertIn('id="detailOfficialLink"', html)
         self.assertEqual(parsed.tag_by_id["allCoursesTab"], "button")
         self.assertEqual(parsed.tag_by_id["openScheduleBtn"], "button")
