@@ -337,35 +337,43 @@ function buildSearchParams() {
   return params;
 }
 function updateFilterSummary() {
-  const parts = []; const mappings = [["#departmentSelect", "系所"], ["#weekdaySelect", "星期"], ["#sectionSelect", "節次"], ["#roomSelect", "教室"], ["#creditsSelect", "學分"], ["#reqSelect", "必選修"], ["#divisionSelect", "部別"], ["#gradeSelect", "年級"], ["#studyLevelSelect", "層級"], ["#courseTagSelect", "標籤"], ["#teacherInput", "教師"], ["#classSelect", "班別"], ["#teachingLanguageSelect", "授課語言"], ["#materialLanguageSelect", "教材語言"], ["#teachingMethodSelect", "教學方式"], ["#assessmentSelect", "評量方式"], ["#relationSelect", "能力／議題"], ["#prerequisiteInput", "先修"]];
+  const parts = []; const mappings = [["#departmentSelect", "系所"], ["#sectionSelect", "節次"], ["#roomSelect", "教室"], ["#creditsSelect", "學分"], ["#reqSelect", "必選修"], ["#divisionSelect", "部別"], ["#studyLevelSelect", "層級"], ["#courseTagSelect", "標籤"], ["#teacherInput", "教師"], ["#classSelect", "班別"], ["#teachingLanguageSelect", "授課語言"], ["#materialLanguageSelect", "教材語言"], ["#teachingMethodSelect", "教學方式"], ["#assessmentSelect", "評量方式"], ["#relationSelect", "能力／議題"], ["#prerequisiteInput", "先修"]];
   for (const [selector, label] of mappings) { const node = $(selector); if (!node?.value) continue; const text = node.tagName === "SELECT" ? node.selectedOptions[0].textContent.replace(/（\d+）$/, "") : node.value; parts.push(`${label}：${text}`); }
+  if (selectedGrades.size) parts.push(`年級：${[...selectedGrades].sort().join("、")}`);
+  if (selectedWeekdays.size) parts.push(`星期：${[...selectedWeekdays].sort().map((value) => weekdayNames[Number(value)]).join("、")}`);
   if ($("#timeOfDaySelect").value !== "all") parts.push(`時段：${$("#timeOfDaySelect").selectedOptions[0].textContent}`); if ($("#scheduleSelect").value !== "all") parts.push($("#scheduleSelect").selectedOptions[0].textContent);
   if ($("#assessmentStyleSelect").value !== "all") parts.push(`評量類型：${$("#assessmentStyleSelect").selectedOptions[0].textContent}`); if ($("#onlineTeachingSelect").value !== "all") parts.push(`線上：${$("#onlineTeachingSelect").selectedOptions[0].textContent}`); if ($("#detailIndexedSelect").value !== "all") parts.push($("#detailIndexedSelect").selectedOptions[0].textContent); if (selectedSections.size) parts.push(`精確節次：${[...selectedSections].join("、")}`);
   if (avoidConflicts) parts.push("避開衝堂");
   $("#activeFilterText").textContent = parts.length ? parts.join("｜") : "尚未設定篩選條件";
-  const advancedNodes = ["#divisionSelect", "#gradeSelect", "#studyLevelSelect", "#courseTagSelect", "#teacherInput", "#classSelect", "#teachingLanguageSelect", "#materialLanguageSelect", "#teachingMethodSelect", "#assessmentSelect", "#relationSelect", "#prerequisiteInput"];
+  const advancedNodes = ["#courseTagSelect", "#teacherInput", "#teachingLanguageSelect", "#materialLanguageSelect", "#teachingMethodSelect", "#assessmentSelect", "#relationSelect", "#prerequisiteInput"];
   let count = advancedNodes.filter((selector) => $(selector).value).length + selectedSections.size + Number($("#timeOfDaySelect").value !== "all") + Number($("#scheduleSelect").value !== "all") + Number($("#assessmentStyleSelect").value !== "all") + Number($("#onlineTeachingSelect").value !== "all") + Number($("#detailIndexedSelect").value !== "all"); $("#advancedCount").textContent = count;
 }
 
 function matchesFavoriteFilters(course, params) {
-  const q = (params.get("q") || "").toLowerCase().trim();
-  const haystack = [
-    course.name, course.name_en, course.course_code,
-    course.teacher, course.department,
-  ].join(" ").toLowerCase();
-  if (q && !q.split(/\s+/).every((term) => haystack.includes(term))) return false;
+  const query = (params.get("q") || "").toLocaleLowerCase().trim();
+  const haystack = [course.name, course.name_en, course.course_code,
+    course.teacher, course.department].join(" ").toLocaleLowerCase();
+  if (query && !query.split(/\s+/).every((word) => haystack.includes(word))) return false;
   const department = params.get("department");
   if (department && course.department_code !== department && course.department !== department) return false;
-  const weekday = Number(params.get("weekday"));
-  const section = params.get("section");
+  const grades = new Set((params.get("grades") || params.get("grade") || "").split(",").map(Number).filter(Boolean));
+  if (grades.size && !grades.has(Number(course.grade))) return false;
+  const classGroup = params.get("class_group");
+  if (classGroup && !(course.class_group || "").includes(classGroup)) return false;
+  if (params.get("division") && course.division !== params.get("division")) return false;
+  if (params.get("study_level") && course.study_level !== params.get("study_level")) return false;
+  const selectedDays = new Set((params.get("weekdays") || params.get("weekday") || "").split(",").map(Number).filter(Boolean));
+  const requestedSections = new Set((params.get("sections") || "").split(",").filter(Boolean));
+  if (params.get("section")) requestedSections.add(params.get("section"));
+  if ((selectedDays.size || requestedSections.size) && !(course.meetings || []).some((meeting) =>
+    (!selectedDays.size || selectedDays.has(meeting.weekday))
+    && (!requestedSections.size || (meeting.sections || []).some((section) => requestedSections.has(section)))
+  )) return false;
   const room = params.get("room");
-  if (weekday && !(course.meetings || []).some((m) => m.weekday === weekday)) return false;
-  if (section && !(course.meetings || []).some((m) => (m.sections || []).includes(section))) return false;
-  if (room && !(course.meetings || []).some((m) => m.room === room)) return false;
+  if (room && !(course.meetings || []).some((meeting) => meeting.room === room)) return false;
   const credits = params.get("min_credits");
   if (credits !== null && Number(course.credits_number) !== Number(credits)) return false;
-  const required = params.get("required_elective");
-  if (required && course.required_elective !== required) return false;
+  if (params.get("required_elective") && course.required_elective !== params.get("required_elective")) return false;
   if (avoidConflicts && courseOverlaps(course, blockedSlots())) return false;
   return true;
 }
@@ -522,10 +530,14 @@ async function showDetail(course) {
   catch (error) { $("#detailContent").innerHTML = `<div class="status">${escapeHtml(error.message)}</div>`; }
 }
 function resetFilters({ searchNow = true } = {}) {
-  for (const selector of ["#searchInput", "#teacherInput", "#prerequisiteInput"]) $(selector).value = "";
+  for (const selector of ["#searchInput", "#teacherInput", "#prerequisiteInput", "#departmentLookup", "#roomLookup"]) $(selector).value = "";
   for (const selector of ["#departmentSelect", "#weekdaySelect", "#sectionSelect", "#roomSelect", "#creditsSelect", "#reqSelect", "#divisionSelect", "#gradeSelect", "#studyLevelSelect", "#courseTagSelect", "#classSelect", "#teachingLanguageSelect", "#materialLanguageSelect", "#teachingMethodSelect", "#assessmentSelect", "#relationSelect"]) $(selector).value = "";
   for (const selector of ["#timeOfDaySelect", "#scheduleSelect", "#assessmentStyleSelect", "#onlineTeachingSelect", "#detailIndexedSelect"]) $(selector).value = "all";
-  $("#sortSelect").value = "relevance"; $("#teachingMethodCriterionSelect").value = "dominant"; $("#assessmentCriterionSelect").value = "dominant"; $("#teachingMethodMinInput").value = "20"; $("#assessmentMinInput").value = "20"; selectedSections.clear(); avoidConflicts = false; renderSectionChips(); if (searchNow) search({ resetPage: true });
+  $("#sortSelect").value = "relevance"; $("#teachingMethodCriterionSelect").value = "dominant"; $("#assessmentCriterionSelect").value = "dominant"; $("#teachingMethodMinInput").value = "20"; $("#assessmentMinInput").value = "20"; selectedSections.clear(); selectedGrades.clear(); selectedWeekdays.clear();
+  avoidConflicts = false; linkedOptions = null;
+  renderSectionChips(); renderGradeChips(); renderWeekdayChips();
+  refreshLinkedOptions();
+  if (searchNow) search({ resetPage: true });
 }
 function openSchedule() { const popup = window.open("/schedule", "fjuCourseSchedule", "width=1380,height=940,resizable=yes,scrollbars=yes"); popup?.focus(); }
 
