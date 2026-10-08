@@ -71,7 +71,7 @@ function courseOverlaps(course, blocked) {
 }
 function updateCourseToolsUI() {
   $("#favoriteCount").textContent = String(favoriteCourses.length);
-  $("#resultsHeading").textContent = viewMode === "favorites" ? "我的收藏" : "課程列表";
+  $("#resultsHeading").textContent = viewMode === "favorites" ? "我的收藏" : "搜尋結果";
   $("#allCoursesTab").classList.toggle("selected", viewMode === "all");
   $("#favoritesTab").classList.toggle("selected", viewMode === "favorites");
   $("#allCoursesTab").setAttribute("aria-pressed", String(viewMode === "all"));
@@ -118,7 +118,44 @@ function activePlan() {
   return plan;
 }
 function selectedCourses() { return activePlan().courses; }
-function updateScheduleCount() { $("#scheduleCount").textContent = selectedCourses().length; }
+function updateScheduleCount() {
+  const courses = selectedCourses();
+  $("#scheduleCount").textContent = String(courses.length);
+  $("#plannerCourseCount").textContent = `${courses.length} 門課`;
+  const credits = courses.reduce((sum, course) => {
+    const raw = course.credits_number ?? course.credits;
+    const value = Number(raw);
+    return sum + (Number.isFinite(value) ? value : 0);
+  }, 0);
+  $("#plannerCredits").textContent = `${Math.round(credits * 10) / 10} 學分`;
+  const root = $("#plannerCourseList");
+  root.replaceChildren();
+  if (!courses.length) {
+    const empty = document.createElement("p");
+    empty.className = "planning-empty";
+    empty.textContent = "還沒加入課程。從搜尋結果按「加入課表」開始。";
+    root.append(empty);
+    return;
+  }
+  for (const course of courses.slice(0, 4)) {
+    const row = document.createElement("div");
+    row.className = "planning-course-row";
+    const code = document.createElement("span");
+    code.className = "planning-course-code";
+    code.textContent = course.course_code || "課程";
+    const name = document.createElement("span");
+    name.className = "planning-course-name";
+    name.textContent = course.name || "未命名課程";
+    row.append(code, name);
+    root.append(row);
+  }
+  if (courses.length > 4) {
+    const more = document.createElement("p");
+    more.className = "planning-more";
+    more.textContent = `另有 ${courses.length - 4} 門課程`;
+    root.append(more);
+  }
+}
 
 function meetingLabel(course) {
   if (!course.meetings?.length) return "上課時間未提供";
@@ -525,6 +562,51 @@ function buildSearchParams() {
   }
   return params;
 }
+// Removable shortcuts for the filters most frequently changed while planning.
+function renderActiveFilterChips() {
+  const root = $("#activeFilterChips");
+  root.replaceChildren();
+  const chips = [
+    ...[["#departmentSelect", "系所"],["#classSelect", "班級"],["#divisionSelect", "部別"],
+      ["#studyLevelSelect", "學制"],["#creditsSelect", "學分"],["#reqSelect", "必／選修"],
+      ["#roomSelect", "教室"],["#sectionSelect", "節次"]]
+      .filter(([selector]) => Boolean($(selector).value))
+      .map(([selector, label]) => {
+        const item = $(selector).selectedOptions[0];
+        const display = selector === "#departmentSelect" ? $("#departmentLookup").value
+          : selector === "#roomSelect" ? $("#roomLookup").value
+          : item?.textContent?.replace(/（\\d+）$/, "") || $(selector).value;
+        return { label: `${label}：${display}`, clear() {
+          $(selector).value = "";
+          if (selector === "#departmentSelect") {
+            $("#departmentLookup").value = "";
+            selectedGrades.clear(); renderGradeChips();
+            $("#classSelect").value = "";
+            refreshLinkedOptions();
+          }
+          if (selector === "#roomSelect") $("#roomLookup").value = "";
+          if (["#studyLevelSelect","#divisionSelect"].includes(selector)) refreshLinkedOptions();
+        } };
+      }),
+    ...(selectedGrades.size ? [{label:`年級：${[...selectedGrades].join("、")}`,clear() {
+      selectedGrades.clear();renderGradeChips();refreshLinkedOptions();
+    }}] : []),
+    ...(selectedWeekdays.size ? [{label:`星期：${[...selectedWeekdays].sort().map(x=>weekdayNames[Number(x)]).join("、")}`,clear() {
+      selectedWeekdays.clear();renderWeekdayChips();
+    }}] : []),
+    ...(avoidConflicts ? [{label:"避免衝堂",clear() { avoidConflicts=false; }}] : []),
+  ];
+  for (const chip of chips) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "active-filter-chip";
+    button.textContent = chip.label + " ×";
+    button.setAttribute("aria-label", "移除篩選：" + chip.label);
+    button.addEventListener("click", () => { chip.clear(); search({resetPage:true}); });
+    root.append(button);
+  }
+}
+
 function updateFilterSummary() {
   const parts = []; const mappings = [["#departmentSelect", "系所"], ["#sectionSelect", "節次"], ["#roomSelect", "教室"], ["#creditsSelect", "學分"], ["#reqSelect", "必選修"], ["#divisionSelect", "部別"], ["#studyLevelSelect", "層級"], ["#courseTagSelect", "標籤"], ["#teacherInput", "教師"], ["#classSelect", "班別"], ["#teachingLanguageSelect", "授課語言"], ["#materialLanguageSelect", "教材語言"], ["#teachingMethodSelect", "教學方式"], ["#assessmentSelect", "評量方式"], ["#relationSelect", "能力／議題"], ["#prerequisiteInput", "先修"]];
   for (const [selector, label] of mappings) { const node = $(selector); if (!node?.value) continue; const text = node.tagName === "SELECT" ? node.selectedOptions[0].textContent.replace(/（\d+）$/, "") : node.value; parts.push(`${label}：${text}`); }
@@ -533,7 +615,8 @@ function updateFilterSummary() {
   if ($("#timeOfDaySelect").value !== "all") parts.push(`時段：${$("#timeOfDaySelect").selectedOptions[0].textContent}`); if ($("#scheduleSelect").value !== "all") parts.push($("#scheduleSelect").selectedOptions[0].textContent);
   if ($("#assessmentStyleSelect").value !== "all") parts.push(`評量類型：${$("#assessmentStyleSelect").selectedOptions[0].textContent}`); if ($("#onlineTeachingSelect").value !== "all") parts.push(`線上：${$("#onlineTeachingSelect").selectedOptions[0].textContent}`); if ($("#detailIndexedSelect").value !== "all") parts.push($("#detailIndexedSelect").selectedOptions[0].textContent); if (selectedSections.size) parts.push(`精確節次：${[...selectedSections].join("、")}`);
   if (avoidConflicts) parts.push("避開衝堂");
-  $("#activeFilterText").textContent = parts.length ? parts.join("｜") : "尚未設定篩選條件";
+  $("#activeFilterText").textContent = parts.length ? `已套用 ${parts.length} 項條件` : "目前未套用篩選條件";
+  renderActiveFilterChips();
   const advancedNodes = ["#courseTagSelect", "#teacherInput", "#teachingLanguageSelect", "#materialLanguageSelect", "#teachingMethodSelect", "#assessmentSelect", "#relationSelect", "#prerequisiteInput"];
   let count = advancedNodes.filter((selector) => $(selector).value).length + selectedSections.size + Number($("#timeOfDaySelect").value !== "all") + Number($("#scheduleSelect").value !== "all") + Number($("#assessmentStyleSelect").value !== "all") + Number($("#onlineTeachingSelect").value !== "all") + Number($("#detailIndexedSelect").value !== "all"); $("#advancedCount").textContent = count;
 }
@@ -580,7 +663,18 @@ function showFavorites(params) {
 function renderCourses() {
   updateCourseToolsUI();
   const root = $("#courseList"); root.replaceChildren();
-  if (!currentCourses.length) { root.innerHTML = '<div class="panel empty-result"><strong>找不到符合條件的課程</strong><span>可清除部分條件，或確認完整搜尋索引是否已涵蓋該進階欄位。</span></div>'; return; }
+  if (!currentCourses.length) {
+    const empty = document.createElement("div"); empty.className = "panel empty-result";
+    const title = document.createElement("strong");
+    title.textContent = viewMode === "favorites" ? "還沒有符合條件的收藏" : "找不到符合條件的課程";
+    const tip = document.createElement("span");
+    tip.textContent = "試著放寬星期、年級或系所條件，讓搜尋範圍更大。";
+    const reset = document.createElement("button");
+    reset.type = "button"; reset.className = "secondary";
+    reset.textContent = "清除篩選，再找一次";
+    reset.addEventListener("click", () => resetFilters());
+    empty.append(title, tip, reset); root.append(empty); return;
+  }
   const template = $("#courseTemplate");
   for (const course of currentCourses) {
     const node = template.content.cloneNode(true);
@@ -621,11 +715,11 @@ function renderCourses() {
     node.querySelector(".outline-link").href = course.outline_url;
     const detailButton = node.querySelector(".detail-btn");
     const staticUnindexed = Boolean(meta?.pages_mode && !course.detail_indexed);
-    detailButton.textContent = staticUnindexed ? "待同步" : "詳情";
+    detailButton.textContent = staticUnindexed ? "資料待同步" : "查看詳情";
     detailButton.disabled = staticUnindexed;
     detailButton.title = staticUnindexed ? "此課尚未完成 GitHub Pages 詳細索引，請先查看官方課綱" : "";
     if (!staticUnindexed) detailButton.addEventListener("click", () => showDetail(course));
-    const button = node.querySelector(".add-btn"); const exists = selectedCourses().some((item) => item.id === course.id); button.textContent = exists ? "已加入" : "加入"; button.disabled = exists; button.addEventListener("click", () => addCourse(course)); root.append(node);
+    const button = node.querySelector(".add-btn"); const exists = selectedCourses().some((item) => item.id === course.id); button.textContent = exists ? "✓ 已加入" : "＋ 加入課表"; button.disabled = exists; button.addEventListener("click", () => addCourse(course)); root.append(node);
   }
 }
 function renderPager() { $("#resultCount").textContent = `${totalResults.toLocaleString()} 門`; $("#pageText").textContent = `${currentPage} / ${totalPages}`; $("#prevPageBtn").disabled = currentPage <= 1; $("#nextPageBtn").disabled = currentPage >= totalPages; }
@@ -770,7 +864,7 @@ $("#filterBackdrop").addEventListener("click", () => setFilterPanelOpen(false));
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && document.body.classList.contains("filters-open")) setFilterPanelOpen(false);
 });
-const desktopQuery = window.matchMedia("(min-width: 901px)");
+const desktopQuery = window.matchMedia("(min-width: 1121px)");
 desktopQuery.addEventListener("change", (event) => {
   if (event.matches) setFilterPanelOpen(false, { restoreFocus: false });
 });
@@ -789,6 +883,21 @@ for (const selector of ["#teacherInput", "#prerequisiteInput"]) {
   $(selector).addEventListener("input", () => queueSearch(350));
 }
 $("#searchInput").addEventListener("input", () => queueSearch(350));
+$("#guideSearchBtn").addEventListener("click", () => {
+  $("#searchInput").scrollIntoView({behavior:"smooth",block:"center"});
+  $("#searchInput").focus();
+});
+$("#guideFilterBtn").addEventListener("click", () => {
+  if (window.matchMedia("(max-width: 1120px)").matches) setFilterPanelOpen(true);
+  else {
+    $("#filterPanel").scrollIntoView({behavior:"smooth",block:"nearest"});
+    $("#departmentLookup").focus();
+  }
+});
+$("#guideScheduleBtn").addEventListener("click", openSchedule);
+$("#openPlannerBtn").addEventListener("click", openSchedule);
+$("#openComparisonBtn").addEventListener("click", openSchedule);
+$("#clearResultsFiltersBtn").addEventListener("click", () => resetFilters());
 $("#allCoursesTab").addEventListener("click", () => { viewMode = "all"; search({ resetPage: true }); });
 $("#favoritesTab").addEventListener("click", () => { viewMode = "favorites"; search({ resetPage: true }); });
 $("#conflictFreeBtn").addEventListener("click", () => { avoidConflicts = !avoidConflicts; search({ resetPage: true }); });
