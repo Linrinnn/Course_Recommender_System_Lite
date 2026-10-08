@@ -135,10 +135,133 @@ function renderSectionChips() {
   for (const item of facets.sections || []) {
     const button = document.createElement("button"); button.type = "button"; button.className = `filter-chip${selectedSections.has(item.value) ? " selected" : ""}`; button.disabled = !item.count;
     button.innerHTML = `<span>${item.label}</span><small>${item.count ?? 0}</small>`;
-    button.addEventListener("click", () => { selectedSections.has(item.value) ? selectedSections.delete(item.value) : selectedSections.add(item.value); renderSectionChips(); updateFilterSummary(); });
+    button.setAttribute("aria-pressed", String(selectedSections.has(item.value)));
+    button.addEventListener("click", () => {
+      selectedSections.has(item.value) ? selectedSections.delete(item.value) : selectedSections.add(item.value);
+      renderSectionChips();
+      queueSearch();
+    });
     root.append(button);
   }
 }
+const weekdayNames = ["", "週一", "週二", "週三", "週四", "週五", "週六", "週日"];
+
+function queueSearch(delay = 180) {
+  clearTimeout(filterDebounce);
+  filterDebounce = setTimeout(() => search({ resetPage: true }), delay);
+}
+
+function renderChoiceChips(rootId, options, selected, onChange) {
+  const root = $(rootId);
+  root.replaceChildren();
+  for (const item of options) {
+    const value = String(item.value);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `filter-chip${selected.has(value) ? " selected" : ""}`;
+    button.setAttribute("aria-pressed", String(selected.has(value)));
+    button.textContent = item.label;
+    button.addEventListener("click", () => {
+      if (selected.has(value)) selected.delete(value);
+      else selected.add(value);
+      onChange();
+    });
+    root.append(button);
+  }
+}
+
+function renderGradeChips() {
+  const options = linkedOptions?.grades || facets.grades || [];
+  renderChoiceChips("#gradeChips", options, selectedGrades, () => {
+    renderGradeChips();
+    refreshLinkedOptions();
+    queueSearch();
+  });
+}
+function renderWeekdayChips() {
+  renderChoiceChips("#weekdayChips",
+    Array.from({ length: 7 }, (_, index) => ({ value: String(index + 1), label: weekdayNames[index + 1] })),
+    selectedWeekdays, () => { renderWeekdayChips(); queueSearch(); });
+}
+
+function updateLookupValue(kind) {
+  const select = kind === "department" ? $("#departmentSelect") : $("#roomSelect");
+  const input = kind === "department" ? $("#departmentLookup") : $("#roomLookup");
+  const entries = kind === "department" ? facets.departments || [] : facets.rooms || [];
+  const item = entries.find((entry) => String(entry.value) === select.value);
+  input.value = item ? String(item.label) : "";
+}
+function fillLookupOptions() {
+  for (const [selector, entries] of [
+    ["#departmentSuggestions", facets.departments || []],
+    ["#roomSuggestions", facets.rooms || []],
+  ]) {
+    const root = $(selector);
+    root.replaceChildren();
+    for (const entry of entries) {
+      const option = document.createElement("option");
+      option.value = String(entry.label);
+      option.label = String(entry.value);
+      root.append(option);
+    }
+  }
+  updateLookupValue("department");
+  updateLookupValue("room");
+}
+function commitLookup(kind, allowPartial = false) {
+  const select = kind === "department" ? $("#departmentSelect") : $("#roomSelect");
+  const input = kind === "department" ? $("#departmentLookup") : $("#roomLookup");
+  const items = kind === "department" ? facets.departments || [] : facets.rooms || [];
+  const value = input.value.trim().toLowerCase();
+  const exact = items.find((item) =>
+    String(item.label).toLowerCase() === value || String(item.value).toLowerCase() === value);
+  const potential = allowPartial && !exact && value ? items.filter((item) =>
+    String(item.label).toLowerCase().includes(value) || String(item.value).toLowerCase().includes(value)) : [];
+  const chosen = exact || (potential.length === 1 ? potential[0] : null);
+  const nextValue = chosen ? String(chosen.value) : "";
+  const changed = select.value !== nextValue;
+  select.value = nextValue;
+  if (chosen) input.value = String(chosen.label);
+  else if (!value) input.value = "";
+  if (changed) {
+    if (kind === "department") {
+      selectedGrades.clear();
+      $("#classSelect").value = "";
+      refreshLinkedOptions();
+    }
+    queueSearch();
+  }
+}
+
+async function refreshLinkedOptions() {
+  if (!facets.grades) return;
+  const sequence = ++linkedSequence;
+  const params = new URLSearchParams();
+  for (const [key, selector] of [
+    ["department", "#departmentSelect"], ["division", "#divisionSelect"],
+    ["study_level", "#studyLevelSelect"],
+  ]) if ($(selector).value) params.set(key, $(selector).value);
+  if (selectedGrades.size) params.set("grades", [...selectedGrades].join(","));
+  try {
+    const response = await fetch(`/api/filter-options?${params}`);
+    if (!response.ok) throw new Error("無法取得班級選項");
+    const options = await response.json();
+    if (sequence !== linkedSequence) return;
+    linkedOptions = options;
+    const allowedGrades = new Set((options.grades || []).map((item) => String(item.value)));
+    for (const grade of [...selectedGrades]) if (!allowedGrades.has(grade)) selectedGrades.delete(grade);
+    renderGradeChips();
+    const oldClass = $("#classSelect").value;
+    fillSelect("#classSelect", options.classes || [], "全部班級");
+    if (oldClass && $("#classSelect").value !== oldClass) queueSearch();
+  } catch (error) {
+    if (sequence === linkedSequence) {
+      linkedOptions = null;
+      renderGradeChips();
+    }
+  }
+}
+
 function applyUrlFilters() {
   const params = new URLSearchParams(location.search);
   const mappings = {
@@ -152,6 +275,12 @@ function applyUrlFilters() {
     if (node.tagName === "SELECT") { if ([...node.options].some((opt) => opt.value === value)) node.value = value; } else node.value = value;
   }
   const sections = params.get("sections"); if (sections) selectedSections = new Set(sections.split(",").filter(Boolean));
+  const grades = params.get("grades") || params.get("grade") || "";
+  const days = params.get("weekdays") || params.get("weekday") || "";
+  selectedGrades = new Set(grades.split(",").filter((v) => /^[1-8]$/.test(v)));
+  selectedWeekdays = new Set(days.split(",").filter((v) => /^[1-7]$/.test(v)));
+  $("#gradeSelect").value = "";
+  $("#weekdaySelect").value = "";
 }
 
 function collectFormValues() {
@@ -174,9 +303,14 @@ async function loadMetaAndFacets({ preserveValues = false } = {}) {
   ].filter(Boolean).join("  ·  ");
   fillSelect("#departmentSelect", facets.departments, "全部系所"); fillSelect("#sectionSelect", (facets.sections || []).filter((item) => item.count), "全部節次"); fillSelect("#roomSelect", facets.rooms, "全部教室"); fillSelect("#creditsSelect", facets.credits, "不限學分");
   fillSelect("#reqSelect", facets.required_elective, "全部"); fillSelect("#divisionSelect", facets.divisions, "全部部別"); fillSelect("#gradeSelect", facets.grades, "全部年級"); fillSelect("#studyLevelSelect", facets.study_levels, "全部層級");
-  fillSelect("#courseTagSelect", facets.course_tags, "全部標籤"); fillSelect("#classSelect", facets.classes, "全部班別"); fillSelect("#teachingLanguageSelect", facets.teaching_languages, "全部授課語言"); fillSelect("#materialLanguageSelect", facets.material_languages, "全部教材語言");
+  fillSelect("#courseTagSelect", facets.course_tags, "全部標籤"); fillSelect("#classSelect", facets.classes, "全部班級"); fillSelect("#teachingLanguageSelect", facets.teaching_languages, "全部授課語言"); fillSelect("#materialLanguageSelect", facets.material_languages, "全部教材語言");
   fillSelect("#teachingMethodSelect", facets.teaching_methods, "全部教學方式"); fillSelect("#assessmentSelect", facets.assessments, "全部評量方式"); fillSelect("#relationSelect", facets.relations, "全部能力／議題"); fillDatalist("#teacherOptions", facets.teachers); renderSectionChips();
   if (previous) restoreFormValues(previous); else applyUrlFilters();
+  fillLookupOptions();
+  renderGradeChips();
+  renderWeekdayChips();
+  renderSectionChips();
+  await refreshLinkedOptions();
   updateCourseToolsUI();
   const indexed = meta.detail_indexed || 0; const total = meta.course_count || 0;
   $("#enrichedCoverageText").textContent = indexed >= total && total
@@ -190,6 +324,8 @@ function buildSearchParams() {
   const mappings = [["q", "#searchInput"], ["department", "#departmentSelect"], ["grade", "#gradeSelect"], ["division", "#divisionSelect"], ["study_level", "#studyLevelSelect"], ["required_elective", "#reqSelect"], ["course_tag", "#courseTagSelect"], ["teacher", "#teacherInput"], ["class_group", "#classSelect"], ["weekday", "#weekdaySelect"], ["section", "#sectionSelect"], ["room", "#roomSelect"], ["time_of_day", "#timeOfDaySelect"], ["schedule", "#scheduleSelect"], ["teaching_language", "#teachingLanguageSelect"], ["material_language", "#materialLanguageSelect"], ["teaching_method", "#teachingMethodSelect"], ["assessment", "#assessmentSelect"], ["assessment_style", "#assessmentStyleSelect"], ["online_teaching", "#onlineTeachingSelect"], ["relation", "#relationSelect"], ["prerequisite", "#prerequisiteInput"], ["detail_indexed", "#detailIndexedSelect"], ["teaching_method_criterion", "#teachingMethodCriterionSelect"], ["teaching_method_min", "#teachingMethodMinInput"], ["assessment_criterion", "#assessmentCriterionSelect"], ["assessment_min", "#assessmentMinInput"]];
   const defaults = new Map([["time_of_day", "all"], ["schedule", "all"], ["assessment_style", "all"], ["online_teaching", "all"], ["detail_indexed", "all"], ["teaching_method_criterion", "dominant"], ["assessment_criterion", "dominant"]]);
   for (const [key, selector] of mappings) { const value = $(selector).value.trim(); if (value && value !== defaults.get(key)) params.set(key, value); }
+  if (selectedGrades.size) params.set("grades", [...selectedGrades].join(","));
+  if (selectedWeekdays.size) params.set("weekdays", [...selectedWeekdays].join(","));
   const credits = $("#creditsSelect").value; if (credits) { params.set("min_credits", credits); params.set("max_credits", credits); }
   if (selectedSections.size) params.set("sections", [...selectedSections].join(","));
   if ($("#timeOfDaySelect").value !== "all") params.set("include_unknown_schedule", "false");
