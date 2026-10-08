@@ -311,6 +311,15 @@
         const result = searchCourses(data.courses, url.searchParams);
         return jsonResponse({ ...result, academic_year: data.meta.academic_year, semester: data.meta.semester });
       }
+      const summaryMatch = path.match(/^\/api\/course-summary\/([^/]+)$/);
+      if (summaryMatch) {
+        const course = data.courses.find((item) => String(item.id) === decodeURIComponent(summaryMatch[1]));
+        if (!course) return jsonResponse({ detail: '目前課程快照中找不到此課' }, 404);
+        return jsonResponse(Object.fromEntries([
+          'id','name','course_code','teacher','department','class_group',
+          'credits_number','outline_url','meetings'
+        ].map((field) => [field, course[field] ?? null])));
+      }
       const detailMatch = path.match(/^\/api\/course\/([^/]+)$/);
       if (detailMatch) {
         const courseId = decodeURIComponent(detailMatch[1]);

@@ -213,6 +213,12 @@ def patch_static_js() -> None:
     schedule = schedule_path.read_text(encoding="utf-8")
     schedule = schedule.replace("const url = `/?weekday=", "const url = `./?weekday=")
     schedule = schedule.replace('location.href = "/";', 'location.href = "./";')
+    # Module imports are independently cacheable; update nested imports too.
+    module_version = os.environ.get("GITHUB_SHA", "local")[:12]
+    schedule = schedule.replace(
+        'from "./schedule-core.mjs"',
+        f'from "./schedule-core.mjs?v={module_version}"',
+    )
     schedule_path.write_text(schedule, encoding="utf-8")
 
 

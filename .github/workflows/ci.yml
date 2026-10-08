@@ -36,6 +36,8 @@ jobs:
         run: |
           node --check static/app.js
           node --check static/schedule.js
+          node --check static/schedule-core.mjs
+          node tests/test_schedule_core.mjs
           node --check static/schedule-modal.js
           node --check static/pages-api.js
           node --check static/department-fix.js

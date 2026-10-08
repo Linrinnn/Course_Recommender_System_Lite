@@ -46,7 +46,13 @@ vm.runInThisContext(
   fixture.courses[0].meetings.push({ weekday: 2, sections: ["D5"], room: "A101" });
   const sameMeeting = await (await window.fetch("/api/courses?weekdays=1&sections=D5")).json();
   assert.equal(sameMeeting.total, 0);
-  console.log("Pages linked filters, multi-grade/day and same-meeting matching passed");
+  const summary = await (await window.fetch("/api/course-summary/1")).json();
+  assert.equal(summary.id, "1");
+  assert.equal(summary.name, "A");
+  assert.equal(summary.meetings[0].weekday, 1);
+  const missing = await window.fetch("/api/course-summary/missing");
+  assert.equal(missing.status, 404);
+  console.log("Pages linked filters, multi-grade/day, same-meeting and summary lookup passed");
 })().catch((error) => {
   console.error(error);
   process.exitCode = 1;

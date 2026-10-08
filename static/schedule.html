@@ -1,100 +1,158 @@
 <!doctype html>
 <html lang="zh-Hant">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>我的課表 | 輔大選課</title>
-  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="/static/styles.css"/>
+  <link rel="stylesheet" href="/static/schedule-v2.css"/>
 </head>
 <body>
-  <main class="shell schedule-shell">
-    <header class="hero">
-      <div class="hero-identity">
-        <div class="hero-copy">
-          <div class="hero-breadcrumb">課程管理 <span aria-hidden="true">/</span> <strong>我的課表</strong></div>
-          <h1>我的課表</h1>
-          <p class="muted small">點選節次，查看可以安排的課程</p>
-        </div>
+<main class="shell schedule-shell timetable-v2">
+  <header class="hero">
+    <div class="hero-identity"><div class="hero-copy">
+      <div class="hero-breadcrumb">課程管理 <span aria-hidden="true">/</span> <strong>我的課表</strong></div>
+      <h1>我的課表</h1><p class="muted small">規劃、比較與匯出你的選課方案</p>
+    </div></div>
+    <div class="hero-actions"><button id="backToSearchBtn" class="secondary">← 返回課程探索</button></div>
+  </header>
+
+  <div id="scheduleNotice" class="schedule-notice hidden" role="status">
+    <span id="scheduleNoticeText"></span><button type="button" id="undoBtn" class="secondary hidden">復原</button>
+    <button type="button" id="dismissNoticeBtn" class="text-btn" aria-label="關閉訊息">✕</button>
+  </div>
+  <section class="panel schedule-control-panel" aria-label="課表方案與匯出">
+    <div class="schedule-plan-toolbar">
+      <label class="field plan-field"><span>目前課表方案</span><select id="planSelect" aria-label="課表方案"></select></label>
+      <button id="addPlanBtn" class="secondary">新增</button>
+      <button id="clonePlanBtn" class="secondary">複製方案</button>
+      <button id="renamePlanBtn" class="secondary">重新命名</button>
+      <button id="deletePlanBtn" class="secondary danger">刪除</button>
+    </div>
+    <div class="schedule-stats" aria-label="課表統計">
+      <div class="stat"><strong id="statCourses">0</strong><span>門課程</span></div>
+      <div class="stat"><strong id="statCredits">0</strong><span>總學分</span></div>
+      <div class="stat"><strong id="statWeekly">0</strong><span>每週節數</span></div>
+      <div class="stat"><strong id="statGaps">0</strong><span>空堂節數</span></div>
+      <div class="stat"><strong id="statConflicts">0</strong><span>衝堂節數</span></div>
+      <div class="stat"><strong id="statUnknown">0</strong><span>時間未定</span></div>
+    </div>
+    <div class="schedule-summary-row">
+      <div><strong id="planSummary">0 門｜0 學分</strong>
+        <span id="termText" class="muted small">正在讀取學期…</span>
+        <span id="semesterWarning" class="term-warning hidden"></span></div>
+      <div class="schedule-actions">
+        <button id="exportPngBtn" class="secondary">下載圖片</button>
+        <button id="printPdfBtn" class="secondary">列印／PDF</button>
+        <button id="exportIcsBtn" class="secondary">行事曆 ICS</button>
+        <button id="exportBackupBtn" class="secondary">備份 JSON</button>
+        <button id="importBackupBtn" class="secondary">匯入備份</button>
+        <input type="file" id="backupFile" accept="application/json,.json" class="visually-hidden" aria-label="選擇課表備份檔"/>
+        <button id="clearPlanBtn" class="secondary danger">清空</button>
       </div>
-      <div class="hero-actions">
-        <button id="backToSearchBtn" class="secondary">← 返回課程探索</button>
+    </div>
+  </section>
+
+  <section class="panel timetable-panel" aria-label="週課表">
+    <div class="section-head timetable-heading">
+      <div><h2>週課表</h2><p class="muted small">點課程可查看或移除；點空白格可搜尋該節次</p></div>
+      <div class="timetable-controls">
+        <label class="field"><span>顯示方式</span><select id="viewMode"><option value="week">整週</option><option value="day">單日</option></select></label>
+        <label class="field day-select"><span>星期</span><select id="daySelect">
+          <option value="1">星期一</option><option value="2">星期二</option><option value="3">星期三</option>
+          <option value="4">星期四</option><option value="5">星期五</option><option value="6">星期六</option>
+          <option value="7">星期日</option></select></label>
+        <label class="check-label"><input type="checkbox" id="showWeekend" checked/>顯示週末</label>
       </div>
+    </div>
+    <div class="mobile-day-nav hidden" id="dayNavigation">
+      <button id="prevDayBtn" class="secondary" aria-label="前一天">←</button>
+      <strong id="currentDayLabel">星期一</strong>
+      <button id="nextDayBtn" class="secondary" aria-label="後一天">→</button>
+    </div>
+    <div id="timetableWrap" class="timetable-wrap" tabindex="0" aria-label="可橫向捲動的週課表"></div>
+    <p class="schedule-legend"><span class="legend-marker legend-course"></span>課程
+      <span class="legend-marker legend-busy"></span>自訂忙碌時段
+      <span class="legend-marker legend-conflict"></span>衝堂／重疊
+      <span class="muted small">時間未定課程不會出現在週格中，仍計入統計</span></p>
+  </section>
+
+  <div class="schedule-secondary-grid">
+    <section class="panel schedule-busy-panel">
+      <div class="section-head"><div><h2>不可排課時段</h2><p class="muted small">加入打工、通勤、社團等固定時段</p></div></div>
+      <form id="busyForm" class="busy-form">
+        <label class="field"><span>用途</span><input id="busyLabel" maxlength="50" required placeholder="例如：打工" /></label>
+        <label class="field"><span>星期</span><select id="busyDay"></select></label>
+        <label class="field"><span>從節次</span><select id="busyStart"></select></label>
+        <label class="field"><span>至節次</span><select id="busyEnd"></select></label>
+        <button type="submit" id="busyAddBtn">加入</button>
+      </form>
+      <div id="busyList" class="busy-list"></div>
+    </section>
+    <section class="panel schedule-insights-panel">
+      <div class="section-head"><div><h2>課表分析與方案比較</h2><p class="muted small">找出更符合時間偏好的課表</p></div></div>
+      <div class="preferences">
+        <label class="check-label"><input type="checkbox" id="prefNoEarly"/>避免早八（D0–D2）</label>
+        <label class="check-label"><input type="checkbox" id="prefNoLate"/>避免晚課（E0–E4）</label>
+        <label class="check-label"><input type="checkbox" id="prefCompact"/>盡量減少空堂</label>
+      </div>
+      <div id="insightText" class="insight-text" role="status"></div>
+      <div class="change-check-toolbar">
+        <button type="button" id="checkCourseChangesBtn" class="secondary">檢查課程資料變更</button>
+        <span class="muted small">比對本網站最新快照，不代表正式選課異動通知</span>
+      </div>
+      <div id="courseChangeResults" class="course-change-results hidden" role="status"></div>
+      <div class="plan-compare-toolbar">
+        <label class="field"><span>與另一方案比較</span><select id="comparePlanSelect"></select></label>
+        <button id="comparePlanBtn" class="secondary">比較方案</button>
+      </div>
+      <div id="planCompareResults" class="plan-compare-results hidden"></div>
+    </section>
+  </div>
+
+  <section id="slotSearchPanel" class="panel slot-search-panel hidden">
+    <div class="slot-toolbar">
+      <div><h2 id="slotTitle">節次搜尋</h2><p id="slotSubtitle" class="muted small"></p></div>
+      <div class="toolbar-actions"><button id="openInSearchBtn" class="secondary">在搜尋頁開啟</button>
+        <button id="closeSlotBtn" class="secondary">關閉</button></div>
+    </div>
+    <div class="search-primary">
+      <label class="field slot-keyword"><span>在此節次內再搜尋</span>
+        <input id="slotKeyword" type="search" placeholder="課名、老師、課號、系所"/></label>
+      <button id="slotSearchBtn">搜尋</button>
+    </div>
+    <div id="slotStatus" class="status hidden"></div>
+    <div id="slotResults" class="course-list"></div>
+    <div class="pager slot-pager">
+      <button id="slotPrevBtn" class="secondary">上一頁</button><span id="slotPageText" class="muted small"></span>
+      <button id="slotNextBtn" class="secondary">下一頁</button>
+    </div>
+  </section>
+</main>
+
+<dialog id="scheduleCourseDialog" class="schedule-course-dialog">
+  <div class="schedule-course-drawer">
+    <header class="course-drawer-header">
+      <div><p class="muted small">COURSE DETAILS</p><h2 id="drawerCourseName">課程資訊</h2></div>
+      <button id="closeCourseDrawerBtn" class="secondary" aria-label="關閉課程資訊">✕</button>
     </header>
+    <div id="drawerCourseDetails" class="course-drawer-details"></div>
+    <footer class="course-drawer-actions">
+      <a id="drawerOutlineLink" target="_blank" rel="noopener" class="secondary">官方課綱 ↗</a>
+      <button type="button" id="replaceCourseBtn" class="secondary">搜尋替代課程</button>
+      <button type="button" id="removeCourseBtn" class="danger">從課表移除</button>
+    </footer>
+  </div>
+</dialog>
 
-    <section class="panel schedule-control-panel">
-      <div class="schedule-plan-toolbar">
-        <select id="planSelect" aria-label="課表方案"></select>
-        <button id="addPlanBtn" class="secondary">新增方案</button>
-        <button id="renamePlanBtn" class="secondary">重新命名</button>
-        <button id="deletePlanBtn" class="secondary danger">刪除方案</button>
-      </div>
-      <div class="schedule-summary-row">
-        <div>
-          <strong id="planSummary">0 門｜0 學分</strong>
-          <span id="termText" class="muted small"></span>
-        </div>
-        <div class="schedule-actions">
-          <button id="clearPlanBtn" class="secondary danger">清空目前方案</button>
-        </div>
-      </div>
-    </section>
-
-    <section class="panel timetable-panel">
-      <div class="section-head wrap">
-        <div>
-          <h2>週課表</h2>
-          <p class="muted small">空白格與已有課程的格子都可以點擊搜尋該節次。</p>
-        </div>
-      </div>
-      <div id="timetableWrap" class="timetable-wrap"></div>
-    </section>
-
-    <section id="slotSearchPanel" class="panel slot-search-panel hidden">
-      <div class="slot-toolbar">
-        <div>
-          <h2 id="slotTitle">節次搜尋</h2>
-          <p id="slotSubtitle" class="muted small"></p>
-        </div>
-        <div class="toolbar-actions">
-          <button id="openInSearchBtn" class="secondary">在搜尋頁開啟</button>
-          <button id="closeSlotBtn" class="secondary">關閉</button>
-        </div>
-      </div>
-      <div class="search-primary">
-        <label class="field slot-keyword">
-          <span>在此節次內再搜尋</span>
-          <input id="slotKeyword" type="search" placeholder="課名、老師、課號、系所" />
-        </label>
-        <button id="slotSearchBtn">搜尋</button>
-      </div>
-      <div id="slotStatus" class="status hidden"></div>
-      <div id="slotResults" class="course-list"></div>
-      <div class="pager slot-pager">
-        <button id="slotPrevBtn" class="secondary">上一頁</button>
-        <span id="slotPageText" class="muted small"></span>
-        <button id="slotNextBtn" class="secondary">下一頁</button>
-      </div>
-    </section>
-  </main>
-
-  <template id="slotCourseTemplate">
-    <article class="course-card slot-course-card">
-      <div class="course-main">
-        <div class="title-row">
-          <h3 class="course-name"></h3>
-          <span class="badge req-badge"></span>
-        </div>
-        <p class="course-meta"></p>
-        <p class="meeting-text"></p>
-        <p class="conflict-note hidden"></p>
-      </div>
-      <div class="course-actions">
-        <a class="outline-link" target="_blank" rel="noopener">官方課綱</a>
-        <button class="add-btn">加入課表</button>
-      </div>
-    </article>
-  </template>
-
-  <script type="module" src="/static/schedule.js"></script>
+<template id="slotCourseTemplate">
+  <article class="course-card slot-course-card">
+    <div class="course-main"><div class="title-row"><h3 class="course-name"></h3><span class="badge req-badge"></span></div>
+      <p class="course-meta"></p><p class="meeting-text"></p><p class="conflict-note hidden"></p></div>
+    <div class="course-actions"><a class="outline-link" target="_blank" rel="noopener">官方課綱</a>
+      <button class="add-btn">加入課表</button></div>
+  </article>
+</template>
+<script type="module" src="/static/schedule.js"></script>
 </body>
 </html>
