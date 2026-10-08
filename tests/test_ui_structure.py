@@ -42,12 +42,18 @@ class UIWorkspaceTests(unittest.TestCase):
             "courseList", "courseTemplate", "prevPageBtn", "nextPageBtn",
             "resultCount", "pageText", "status", "detailDialog", "detailTitle",
             "detailContent", "closeDetailBtn", "enrichedCoverageText",
+            "favoriteCount", "favoritesTab", "allCoursesTab", "conflictFreeBtn",
+            "compareOpenBtn", "compareCount", "compareDialog", "compareContent",
+            "closeCompareBtn", "copyCompareBtn", "savedViewsSelect",
+            "saveViewBtn", "deleteViewBtn",
         }
         self.assertFalse(required.difference(parsed.ids))
         self.assertEqual(parsed.tag_by_id["filterPanel"], "aside")
         self.assertEqual(parsed.tag_by_id["resultsPanel"], "section")
         self.assertEqual(parsed.tag_by_id["mobileFiltersBtn"], "button")
         self.assertIn('class="workspace-layout"', html)
+        self.assertIn('class="favorite-btn"', html)
+        self.assertIn('class="compare-btn secondary"', html)
 
     def test_schedule_preserves_slot_controls(self):
         html = (STATIC / "schedule.html").read_text(encoding="utf-8")
