@@ -54,6 +54,13 @@ function blockedSlots() {
     if (!Number.isInteger(meeting.weekday) || meeting.weekday < 1 || meeting.weekday > 7) continue;
     for (const section of meeting.sections || []) used.add(`${meeting.weekday}:${String(section).toUpperCase()}`);
   }
+  // Busy blocks created in Timetable 2.0 also count as unavailable slots.
+  const order = ["D0","D1","D2","D3","D4","DN","D5","D6","D7","D8","E0","E1","E2","E3","E4"];
+  for (const block of activePlan()?.busyBlocks || []) {
+    const start = order.indexOf(block.start), end = order.indexOf(block.end);
+    if (start < 0 || end < start || !Number.isInteger(Number(block.weekday)) || Number(block.weekday) < 1 || Number(block.weekday) > 7) continue;
+    for (const section of order.slice(start, end + 1)) used.add(`${block.weekday}:${section}`);
+  }
   return used;
 }
 function courseOverlaps(course, blocked) {
@@ -85,6 +92,25 @@ function loadState() {
   return { activePlanId: id, plans: [{ id, name: "方案 A", courses: Array.isArray(legacy) ? legacy : [] }] };
 }
 function saveState() { localStorage.setItem(stateKey, JSON.stringify(state)); updateScheduleCount(); }
+function ensureStateTerm() {
+  if (!meta?.academic_year || !meta?.semester) return;
+  const key = `${meta.academic_year}-${meta.semester}`;
+  let changed = false;
+  for (const plan of state.plans) {
+    if (!plan.termKey) { plan.termKey = key; changed = true; }
+    if (!Array.isArray(plan.busyBlocks)) { plan.busyBlocks = []; changed = true; }
+  }
+  if (!state.plans.some((plan) => plan.termKey === key)) {
+    const id = makeId();
+    state.plans.push({ id, name: "新學期方案", termKey: key, courses: [], busyBlocks: [] });
+    state.activePlanId = id;
+    changed = true;
+  } else if (state.plans.find((plan) => plan.id === state.activePlanId)?.termKey !== key) {
+    state.activePlanId = state.plans.find((plan) => plan.termKey === key).id;
+    changed = true;
+  }
+  if (changed) saveState();
+}
 function activePlan() {
   let plan = state.plans.find((item) => item.id === state.activePlanId);
   if (!plan) { plan = state.plans[0]; state.activePlanId = plan.id; saveState(); }
@@ -113,7 +139,19 @@ function addCourse(course) {
   const courses = selectedCourses();
   if (courses.some((item) => item.id === course.id)) return;
   const conflicts = courses.filter((item) => conflict(item, course));
-  if (conflicts.length && !window.confirm(`「${course.name}」會與 ${conflicts.map((item) => item.name).join("、")} 衝堂。仍要加入嗎？`)) return;
+  const blocked = new Set();
+  const order = ["D0","D1","D2","D3","D4","DN","D5","D6","D7","D8","E0","E1","E2","E3","E4"];
+  for (const b of activePlan().busyBlocks || []) {
+    const start = order.indexOf(b.start), end = order.indexOf(b.end);
+    if (start < 0 || end < start) continue;
+    for (const section of order.slice(start, end + 1)) blocked.add(`${b.weekday}:${section}`);
+  }
+  const clashesBusy = (course.meetings || []).some((meeting) =>
+    (meeting.sections || []).some((section) => blocked.has(`${meeting.weekday}:${section}`)));
+  const why = conflicts.map((item) => item.name).concat(clashesBusy ? ["自訂忙碌時段"] : []);
+  if (why.length && !window.confirm(`「${course.name}」會與 ${why.join("、")} 衝堂。仍要加入嗎？`)) return;
+  if (!(course.meetings || []).some((m) => m.weekday && (m.sections || []).length)
+    && !window.confirm("這門課的上課時間未定，無法完整檢查衝堂。仍要加入嗎？")) return;
   courses.push(course); saveState();
   if (avoidConflicts) search({ resetPage: true }); else renderCourses();
 }
@@ -304,6 +342,8 @@ async function loadMetaAndFacets({ preserveValues = false } = {}) {
   const previous = preserveValues ? collectFormValues() : null;
   const [metaResponse, facetResponse] = await Promise.all([fetch("/api/meta"), fetch("/api/facets")]); meta = await metaResponse.json(); facets = await facetResponse.json();
   if (!metaResponse.ok) throw new Error(meta.detail || "無法讀取學期資訊"); if (!facetResponse.ok) throw new Error(facets.detail || "無法讀取篩選資料");
+  ensureStateTerm();
+  updateScheduleCount();
   const dataUpdated = meta.course_data_updated_at ? new Date(meta.course_data_updated_at * 1000).toLocaleString("zh-TW", { hour12: false }) : "";
   $("#termText").textContent = [
     `${meta.academic_year} 學年度・第 ${meta.semester} 學期`,
