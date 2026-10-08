@@ -44,8 +44,8 @@ class UIWorkspaceTests(unittest.TestCase):
             "detailContent", "closeDetailBtn", "enrichedCoverageText",
             "favoriteCount", "favoritesTab", "allCoursesTab", "conflictFreeBtn",
             "gradeChips", "weekdayChips", "classSelect", "studyLevelSelect",
-            "divisionSelect", "departmentLookup", "departmentSuggestions",
-            "roomLookup", "roomSuggestions",
+            "divisionSelect", "departmentLookup", "departmentMenu",
+            "departmentLookupToggle", "roomLookup", "roomMenu", "roomLookupToggle",
         }
         self.assertFalse(required.difference(parsed.ids))
         self.assertEqual(parsed.tag_by_id["filterPanel"], "aside")
@@ -60,6 +60,12 @@ class UIWorkspaceTests(unittest.TestCase):
         self.assertIn('id="weekdayChips"', html)
         self.assertIn('id="roomLookup"', html)
         self.assertIn('class="app-rail"', html)
+        self.assertNotIn('id="departmentSuggestions"', html)
+        self.assertNotIn('id="roomSuggestions"', html)
+        self.assertIn('href="/static/brand-mark.svg"', html)
+        self.assertIn('role="combobox"', html)
+        self.assertIn('id="departmentMenu"', html)
+        self.assertIn('id="roomMenu"', html)
         self.assertIn('class="app-content"', html)
         self.assertIn('class="course-list-head"', html)
         self.assertIn('class="course-teacher-cell"', html)
@@ -92,6 +98,9 @@ class UIWorkspaceTests(unittest.TestCase):
             self.assertIn(required, parsed.ids)
         self.assertIn('src="/static/schedule.js"', html)
         self.assertIn('href="/static/schedule-v2.css"', html)
+        self.assertIn('class="schedule-brand"', html)
+        self.assertIn('id="comparePlanBtn"', html)
+        self.assertIn('① 上方點「複製方案」', html)
 
     def test_mobile_filter_styles_and_handlers_are_present(self):
         css = (STATIC / "styles.css").read_text(encoding="utf-8")
