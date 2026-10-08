@@ -9,26 +9,31 @@
 <body>
   <main class="shell">
     <header class="hero">
-      <div>
-        <p class="eyebrow">FJU Course Recommender Lite+</p>
-        <h1>課程搜尋</h1>
-        <p id="termText" class="muted">讀取學期資料中…</p>
+      <div class="hero-identity">
+        <div class="brand-mark" aria-hidden="true">F</div>
+        <div class="hero-copy">
+          <p class="eyebrow">FJU / COURSE EXPLORER</p>
+          <h1>輔大課程探索</h1>
+          <p id="termText" class="muted small">讀取學期資料中…</p>
+        </div>
       </div>
       <div class="hero-actions">
-        <button id="openScheduleBtn" class="secondary">開啟獨立課表 <span id="scheduleCount">0</span></button>
-        <button id="refreshBtn" class="secondary">更新課程資料</button>
+        <button id="refreshBtn" class="secondary">重新載入</button>
+        <button id="openScheduleBtn" class="schedule-trigger">我的課表 <span id="scheduleCount">0</span></button>
       </div>
     </header>
 
-    <section class="panel search-panel">
-      <div class="search-primary">
-        <label class="field search-field">
-          <span>搜尋課程</span>
-          <input id="searchInput" type="search" placeholder="課名、課號、教師、系所、課程目標、每週進度、教材…" autocomplete="off" />
-        </label>
-        <button id="searchBtn">搜尋</button>
+    <button id="filterBackdrop" class="filter-backdrop" type="button" aria-label="關閉篩選面板" tabindex="-1"></button>
+    <div class="workspace-layout">
+    <aside class="panel search-panel" id="filterPanel" aria-label="課程篩選條件">
+      <div class="filter-heading">
+        <div>
+          <p class="overline">DISCOVER / FILTERS</p>
+          <h2>篩選課程</h2>
+        </div>
+        <button type="button" id="closeFiltersBtn" class="text-btn close-filters" aria-label="關閉篩選">✕</button>
       </div>
-
+      <p class="filter-intro">依系所、時間與教室縮小搜尋範圍</p>
       <div class="quick-filter-grid">
         <label class="field"><span>系所</span><select id="departmentSelect"><option value="">全部系所</option></select></label>
         <label class="field"><span>星期</span><select id="weekdaySelect">
@@ -92,16 +97,33 @@
         <div id="activeFilterText" class="muted small">未套用額外條件</div>
         <div class="toolbar-actions"><button id="resetFiltersBtn" class="secondary">清除條件</button><button id="applyFiltersBtn">套用篩選</button></div>
       </div>
-    </section>
+    </aside>
 
-    <section class="results-column">
-      <div class="section-head wrap">
-        <div><h2>搜尋結果</h2><span id="resultCount" class="muted"></span></div>
-        <div class="pager"><button id="prevPageBtn" class="secondary">上一頁</button><span id="pageText" class="muted small"></span><button id="nextPageBtn" class="secondary">下一頁</button></div>
+    <section class="results-column" id="resultsPanel" aria-label="搜尋結果">
+      <div class="search-primary">
+        <label class="field search-field">
+          <span>快速搜尋</span>
+          <input id="searchInput" type="search" placeholder="搜尋課程名稱、教師、課號、系所…" autocomplete="off" />
+        </label>
+        <button id="searchBtn">搜尋課程</button>
+      </div>
+      <div class="results-head">
+        <div class="results-title">
+          <p class="overline">COURSE CATALOG</p>
+          <div class="results-title-line">
+            <h2>搜尋結果</h2>
+            <span id="resultCount" class="muted small"></span>
+          </div>
+        </div>
+        <div class="results-tools">
+          <button type="button" id="mobileFiltersBtn" class="secondary mobile-filters" aria-controls="filterPanel" aria-expanded="false">篩選條件 <span aria-hidden="true">☷</span></button>
+          <div class="pager"><button id="prevPageBtn" class="secondary" aria-label="上一頁">上一頁</button><span id="pageText" class="muted small"></span><button id="nextPageBtn" class="secondary" aria-label="下一頁">下一頁</button></div>
+        </div>
       </div>
       <div id="status" class="status">載入中…</div>
       <div id="courseList" class="course-list"></div>
     </section>
+    </div>
   </main>
 
   <dialog id="detailDialog" class="detail-dialog">

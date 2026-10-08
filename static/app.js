@@ -102,12 +102,11 @@ async function loadMetaAndFacets({ preserveValues = false } = {}) {
   if (!metaResponse.ok) throw new Error(meta.detail || "無法讀取學期資訊"); if (!facetResponse.ok) throw new Error(facets.detail || "無法讀取篩選資料");
   const dataUpdated = meta.course_data_updated_at ? new Date(meta.course_data_updated_at * 1000).toLocaleString("zh-TW", { hour12: false }) : "";
   $("#termText").textContent = [
-    "輔仁大學公開課程大綱 API",
-    `${meta.academic_year} 學年度第 ${meta.semester} 學期`,
+    `${meta.academic_year} 學年度・第 ${meta.semester} 學期`,
+    `${meta.course_count.toLocaleString()} 門課程`,
     meta.course_scope ? `課綱範圍 ${meta.course_scope}` : "",
-    `${meta.course_count.toLocaleString()} 門`,
-    dataUpdated ? `資料更新：${dataUpdated}` : "",
-  ].filter(Boolean).join("｜");
+    dataUpdated ? `更新 ${dataUpdated}` : "",
+  ].filter(Boolean).join("  ·  ");
   fillSelect("#departmentSelect", facets.departments, "全部系所"); fillSelect("#sectionSelect", (facets.sections || []).filter((item) => item.count), "全部節次"); fillSelect("#roomSelect", facets.rooms, "全部教室"); fillSelect("#creditsSelect", facets.credits, "不限學分");
   fillSelect("#reqSelect", facets.required_elective, "全部"); fillSelect("#divisionSelect", facets.divisions, "全部部別"); fillSelect("#gradeSelect", facets.grades, "全部年級"); fillSelect("#studyLevelSelect", facets.study_levels, "全部層級");
   fillSelect("#courseTagSelect", facets.course_tags, "全部標籤"); fillSelect("#classSelect", facets.classes, "全部班別"); fillSelect("#teachingLanguageSelect", facets.teaching_languages, "全部授課語言"); fillSelect("#materialLanguageSelect", facets.material_languages, "全部教材語言");
@@ -243,7 +242,29 @@ function resetFilters() {
 }
 function openSchedule() { const popup = window.open("/schedule", "fjuCourseSchedule", "width=1380,height=940,resizable=yes,scrollbars=yes"); popup?.focus(); }
 
-$("#searchBtn").addEventListener("click", () => search({ resetPage: true })); $("#applyFiltersBtn").addEventListener("click", () => search({ resetPage: true })); $("#resetFiltersBtn").addEventListener("click", resetFilters); $("#openScheduleBtn").addEventListener("click", openSchedule);
+function setFilterPanelOpen(open, { restoreFocus = true } = {}) {
+  document.body.classList.toggle("filters-open", open);
+  const toggle = $("#mobileFiltersBtn");
+  toggle?.setAttribute("aria-expanded", String(open));
+  if (open) $("#closeFiltersBtn")?.focus();
+  else if (restoreFocus) toggle?.focus();
+}
+
+$("#mobileFiltersBtn").addEventListener("click", () => setFilterPanelOpen(true));
+$("#closeFiltersBtn").addEventListener("click", () => setFilterPanelOpen(false));
+$("#filterBackdrop").addEventListener("click", () => setFilterPanelOpen(false));
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && document.body.classList.contains("filters-open")) setFilterPanelOpen(false);
+});
+const desktopQuery = window.matchMedia("(min-width: 901px)");
+desktopQuery.addEventListener("change", (event) => {
+  if (event.matches) setFilterPanelOpen(false, { restoreFocus: false });
+});
+
+$("#searchBtn").addEventListener("click", () => search({ resetPage: true }));
+$("#applyFiltersBtn").addEventListener("click", () => { setFilterPanelOpen(false, { restoreFocus: false }); search({ resetPage: true }); });
+$("#resetFiltersBtn").addEventListener("click", resetFilters);
+$("#openScheduleBtn").addEventListener("click", openSchedule);
 $("#prevPageBtn").addEventListener("click", () => { if (currentPage > 1) { currentPage -= 1; search(); } }); $("#nextPageBtn").addEventListener("click", () => { if (currentPage < totalPages) { currentPage += 1; search(); } }); $("#searchInput").addEventListener("keydown", (event) => { if (event.key === "Enter") search({ resetPage: true }); });
 $("#closeDetailBtn").addEventListener("click", () => $("#detailDialog").close()); $("#detailDialog").addEventListener("click", (event) => { if (event.target === $("#detailDialog")) $("#detailDialog").close(); });
 $("#refreshBtn").addEventListener("click", async () => { $("#refreshBtn").disabled = true; try { const response = await fetch("/api/refresh", { method: "POST" }); const data = await response.json(); if (!response.ok) throw new Error(data.detail || "更新失敗"); await loadMetaAndFacets({ preserveValues: true }); await search({ updateUrl: false }); } catch (error) { window.alert(error.message); } finally { $("#refreshBtn").disabled = false; } });
