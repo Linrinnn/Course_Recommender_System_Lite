@@ -63,6 +63,7 @@ function courseOverlaps(course, blocked) {
 }
 function updateCourseToolsUI() {
   $("#favoriteCount").textContent = String(favoriteCourses.length);
+  $("#resultsHeading").textContent = viewMode === "favorites" ? "我的收藏" : "課程列表";
   $("#allCoursesTab").classList.toggle("selected", viewMode === "all");
   $("#favoritesTab").classList.toggle("selected", viewMode === "favorites");
   $("#allCoursesTab").setAttribute("aria-pressed", String(viewMode === "all"));
@@ -414,17 +415,38 @@ function renderCourses() {
     favoriteButton.title = isFavorite ? "取消收藏" : "收藏課程";
     favoriteButton.addEventListener("click", () => toggleFavorite(course));
     const en = node.querySelector(".course-name-en"); en.textContent = course.name_en || ""; if (!course.name_en) en.classList.add("hidden");
-    node.querySelector(".req-badge").textContent = course.required_elective || "未標示"; const indexBadge = node.querySelector(".index-badge"); indexBadge.textContent = course.detail_indexed ? "完整索引" : "基本資料"; indexBadge.classList.add(course.detail_indexed ? "fit-badge" : "neutral-badge");
-    node.querySelector(".course-meta").textContent = [course.course_code, course.teacher, course.credits !== null && course.credits !== "" ? `${course.credits} 學分` : "", course.department, course.grade ? `${course.grade} 年級` : "", course.division, course.class_group, course.teaching_language ? `授課：${course.teaching_language}` : ""].filter(Boolean).join("｜");
-    node.querySelector(".meeting-text").textContent = meetingLabel(course); const tagsRoot = node.querySelector(".course-tags"); for (const tag of course.course_tags || []) { const span = document.createElement("span"); span.className = "course-tag"; span.textContent = tag.label; tagsRoot.append(span); }
+    node.querySelector(".req-badge").textContent = course.required_elective || "未標示";
+    const indexBadge = node.querySelector(".index-badge");
+    indexBadge.textContent = course.detail_indexed ? "課綱已同步" : "課綱待同步";
+    indexBadge.classList.add(course.detail_indexed ? "fit-badge" : "neutral-badge");
+    node.querySelector(".course-meta").textContent = [
+      course.course_code, course.department,
+      course.grade ? `${course.grade} 年級` : "",
+      course.division,
+    ].filter(Boolean).join(" · ");
+    node.querySelector(".course-teacher").textContent = course.teacher || "未提供";
+    node.querySelector(".course-class-label").textContent = course.class_group || "";
+    node.querySelector(".course-credits").textContent = course.credits_number != null ? String(course.credits_number) : "—";
+    node.querySelector(".meeting-text").textContent = meetingLabel(course);
+    const tagsRoot = node.querySelector(".course-tags");
+    for (const tag of (course.course_tags || []).slice(0, 3)) {
+      const span = document.createElement("span");
+      span.className = "course-tag";
+      span.textContent = tag.label;
+      tagsRoot.append(span);
+    }
+    const mobileMeta = document.createElement("p");
+    mobileMeta.className = "course-mobile-meta";
+    mobileMeta.textContent = [course.teacher, course.class_group, course.credits_number != null ? `${course.credits_number} 學分` : ""].filter(Boolean).join(" · ");
+    node.querySelector(".course-main").append(mobileMeta);
     node.querySelector(".outline-link").href = course.outline_url;
     const detailButton = node.querySelector(".detail-btn");
     const staticUnindexed = Boolean(meta?.pages_mode && !course.detail_indexed);
-    detailButton.textContent = staticUnindexed ? "完整資料尚未同步" : "完整資料";
+    detailButton.textContent = staticUnindexed ? "待同步" : "詳情";
     detailButton.disabled = staticUnindexed;
     detailButton.title = staticUnindexed ? "此課尚未完成 GitHub Pages 詳細索引，請先查看官方課綱" : "";
     if (!staticUnindexed) detailButton.addEventListener("click", () => showDetail(course));
-    const button = node.querySelector(".add-btn"); const exists = selectedCourses().some((item) => item.id === course.id); button.textContent = exists ? "已在課表" : "加入課表"; button.disabled = exists; button.addEventListener("click", () => addCourse(course)); root.append(node);
+    const button = node.querySelector(".add-btn"); const exists = selectedCourses().some((item) => item.id === course.id); button.textContent = exists ? "已加入" : "加入"; button.disabled = exists; button.addEventListener("click", () => addCourse(course)); root.append(node);
   }
 }
 function renderPager() { $("#resultCount").textContent = `${totalResults.toLocaleString()} 門`; $("#pageText").textContent = `${currentPage} / ${totalPages}`; $("#prevPageBtn").disabled = currentPage <= 1; $("#nextPageBtn").disabled = currentPage >= totalPages; }
@@ -534,7 +556,12 @@ function renderDetail(course) {
   </dl>`;
 }
 async function showDetail(course) {
-  $("#detailDialog").showModal(); $("#detailTitle").textContent = course.name; $("#detailContent").innerHTML = '<div class="status">載入完整課程資料…</div>';
+  $("#detailDialog").showModal();
+  $("#detailTitle").textContent = course.name;
+  const officialLink = $("#detailOfficialLink");
+  if (course.outline_url) { officialLink.href = course.outline_url; officialLink.classList.remove("hidden"); }
+  else { officialLink.removeAttribute("href"); officialLink.classList.add("hidden"); }
+  $("#detailContent").innerHTML = '<div class="status">正在載入課程資料…</div>';
   try { const response = await fetch(`/api/course/${encodeURIComponent(course.id)}`); const detail = await response.json(); if (!response.ok) throw new Error(detail.detail || "完整資料載入失敗"); renderDetail(detail); if (!course.detail_indexed) { await loadMetaAndFacets({ preserveValues: true }); await search({ updateUrl: false }); } }
   catch (error) { $("#detailContent").innerHTML = `<div class="status">${escapeHtml(error.message)}</div>`; }
 }
