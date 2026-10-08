@@ -295,6 +295,10 @@ async function searchSlot(){
     if(req!==slotRequest)return;
     if(!response.ok)throw Error(data.detail||"搜尋失敗");
     slotCourses=data.items||[];
+    if(preferences.noEarly||preferences.noLate||preferences.compact) {
+      slotCourses=[...slotCourses].sort((a,b)=>candidateScore(b)-candidateScore(a));
+      $("#slotSubtitle").textContent="目前頁面已依早課／晚課／空堂偏好排序；仍需確認全部上課時段。";
+    }
     slotPage=data.page||1;slotTotalPages=data.total_pages||1;
     $("#slotStatus").classList.add("hidden");renderSlotResults();
   }catch(e) {
@@ -443,6 +447,83 @@ function updateComparison(){
   root.classList.remove("hidden");
 }
 
+function candidateScore(course) {
+  const before=scheduleStats(courses(),busyBlocks());
+  const after=scheduleStats([...courses().filter(c=>String(c.id)!==String(replaceId)),course],busyBlocks());
+  const conflict=conflictsWith(course,courses(),busyBlocks(),replaceId);
+  let score=-(conflict.courses.length+conflict.busy.length)*50;
+  if(after.unknownCount>before.unknownCount)score-=12;
+  const sections=[...meetingSlots(course)].map(slot=>slot.split(":")[1]);
+  if(preferences.noEarly&&sections.some(s=>["D0","D1","D2"].includes(s)))score-=12;
+  if(preferences.noLate&&sections.some(s=>s.startsWith("E")))score-=12;
+  if(preferences.compact)score-=(after.gapSections-before.gapSections)*5;
+  return score;
+}
+function normalizeMeetings(meetings) {
+  return (meetings||[]).map(m=>({
+    weekday:Number(m.weekday)||0,
+    sections:[...(m.sections||[])].map(String).sort(),
+    room:String(m.room||"").trim()
+  })).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)));
+}
+function courseDifferences(oldCourse,newCourse) {
+  const differences=[];
+  for(const [key,label] of [["name","課名"],["teacher","教師"],["credits_number","學分"]]) {
+    if(String(oldCourse[key]??"")!==String(newCourse[key]??"")) differences.push(label);
+  }
+  if(JSON.stringify(normalizeMeetings(oldCourse.meetings))!==JSON.stringify(normalizeMeetings(newCourse.meetings))) differences.push("時間／教室");
+  return differences;
+}
+async function checkCourseChanges() {
+  const root=$("#courseChangeResults"),button=$("#checkCourseChangesBtn");
+  root.classList.remove("hidden");root.textContent="正在與網站目前的課程資料快照比對…";
+  button.disabled=true;
+  const planId=activePlan()?.id,selected=[...courses()];
+  const changes=[],missing=[],failed=[];
+  try{
+    for(let i=0;i<selected.length;i+=5) {
+      const batch=selected.slice(i,i+5);
+      const responses=await Promise.all(batch.map(async(oldCourse)=>{
+        try {
+          const response=await fetch("/api/course-summary/"+encodeURIComponent(oldCourse.id));
+          if(response.status===404)return {oldCourse,missing:true};
+          const data=await response.json();
+          if(!response.ok)throw Error(data.detail||"請求失敗");
+          return {oldCourse,newCourse:data,diff:courseDifferences(oldCourse,data)};
+        }catch(error){return {oldCourse,error:String(error.message||error)};}
+      }));
+      for(const value of responses) {
+        if(value.missing)missing.push(value.oldCourse);
+        else if(value.error)failed.push(value.oldCourse.name);
+        else if(value.diff.length)changes.push(value);
+      }
+    }
+    if(activePlan()?.id!==planId){root.textContent="方案已切換，請重新檢查。";return;}
+    root.replaceChildren();
+    const summary=cell("p","比較完成："+changes.length+" 門資料不同、"+missing.length+
+      " 門不在目前快照、"+failed.length+" 門查詢失敗。");
+    root.append(summary);
+    for(const entry of changes){
+      const row=document.createElement("div");row.className="course-change-row";
+      row.append(cell("span",entry.oldCourse.name+" · "+entry.diff.join("、")+"有變動"));
+      const apply=cell("button","採用目前資料");apply.type="button";apply.className="secondary";
+      apply.addEventListener("click",()=>{
+        const plan=state.plans.find(p=>p.id===planId);
+        if(!plan || plan.termKey!==activeTerm){notify("學期已切換，請重新檢查。");return;}
+        const idx=plan.courses.findIndex(c=>String(c.id)===String(entry.oldCourse.id));
+        if(idx<0)return;
+        plan.courses[idx]={...plan.courses[idx],...entry.newCourse};
+        saveState();renderAll();apply.disabled=true;apply.textContent="已更新";
+      });
+      row.append(apply);root.append(row);
+    }
+    for(const missingCourse of missing)root.append(cell("p","目前快照未找到："+missingCourse.name+"；原課表資料已保留。"));
+    for(const name of failed)root.append(cell("p","無法查詢："+name+"；請稍後再試。"));
+    if(!changes.length&&!missing.length&&!failed.length)root.append(cell("p","所選課程與目前快照一致。"));
+    root.append(cell("small","注意：這裡只比對網站的最近同步資料；不代表教務處即時選課資料。"));
+  }finally{button.disabled=false;}
+}
+
 // Page events.
 $("#planSelect").addEventListener("change",ev=>{state.activePlanId=ev.target.value;saveState();renderAll();if(slot)renderSlotResults();});
 $("#addPlanBtn").addEventListener("click",()=>{
@@ -511,6 +592,7 @@ $("#busyForm").addEventListener("submit",ev=>{
   $("#busyLabel").value="";notify("已新增忙碌時段。");
 });
 $("#comparePlanBtn").addEventListener("click",updateComparison);
+$("#checkCourseChangesBtn").addEventListener("click",checkCourseChanges);
 $("#exportBackupBtn").addEventListener("click",exportBackup);
 $("#importBackupBtn").addEventListener("click",()=>$("#backupFile").click());
 $("#backupFile").addEventListener("change",ev=>importBackup(ev.target.files?.[0]));
