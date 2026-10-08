@@ -45,12 +45,18 @@ class PagesBuildTests(unittest.TestCase):
                 'import { a } from "./schedule-core.mjs"; location.href = "/";',
                 encoding="utf-8",
             )
+            (static / "app.js").write_text(
+                'import { f } from "./filter-ui.mjs";',
+                encoding="utf-8",
+            )
             with patch.object(build_pages, "DIST", Path(folder)):
                 with patch.dict("os.environ", {"GITHUB_SHA": "abc1234567890"}):
                     build_pages.patch_static_js()
             result = (static / "schedule.js").read_text(encoding="utf-8")
             self.assertIn('from "./schedule-core.mjs?v=abc123456789"', result)
             self.assertIn('location.href = "./";', result)
+            app_js = (static / "app.js").read_text(encoding="utf-8")
+            self.assertIn('from "./filter-ui.mjs?v=abc123456789"', app_js)
 
     @patch(
         'build_pages.load_department_reference',
