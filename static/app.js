@@ -102,12 +102,11 @@ async function loadMetaAndFacets({ preserveValues = false } = {}) {
   if (!metaResponse.ok) throw new Error(meta.detail || "無法讀取學期資訊"); if (!facetResponse.ok) throw new Error(facets.detail || "無法讀取篩選資料");
   const dataUpdated = meta.course_data_updated_at ? new Date(meta.course_data_updated_at * 1000).toLocaleString("zh-TW", { hour12: false }) : "";
   $("#termText").textContent = [
-    "輔仁大學公開課程大綱 API",
-    `${meta.academic_year} 學年度第 ${meta.semester} 學期`,
+    `${meta.academic_year} 學年度・第 ${meta.semester} 學期`,
+    `${meta.course_count.toLocaleString()} 門課程`,
     meta.course_scope ? `課綱範圍 ${meta.course_scope}` : "",
-    `${meta.course_count.toLocaleString()} 門`,
-    dataUpdated ? `資料更新：${dataUpdated}` : "",
-  ].filter(Boolean).join("｜");
+    dataUpdated ? `更新 ${dataUpdated}` : "",
+  ].filter(Boolean).join("  ·  ");
   fillSelect("#departmentSelect", facets.departments, "全部系所"); fillSelect("#sectionSelect", (facets.sections || []).filter((item) => item.count), "全部節次"); fillSelect("#roomSelect", facets.rooms, "全部教室"); fillSelect("#creditsSelect", facets.credits, "不限學分");
   fillSelect("#reqSelect", facets.required_elective, "全部"); fillSelect("#divisionSelect", facets.divisions, "全部部別"); fillSelect("#gradeSelect", facets.grades, "全部年級"); fillSelect("#studyLevelSelect", facets.study_levels, "全部層級");
   fillSelect("#courseTagSelect", facets.course_tags, "全部標籤"); fillSelect("#classSelect", facets.classes, "全部班別"); fillSelect("#teachingLanguageSelect", facets.teaching_languages, "全部授課語言"); fillSelect("#materialLanguageSelect", facets.material_languages, "全部教材語言");
