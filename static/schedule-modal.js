@@ -16,8 +16,8 @@
     <div class="schedule-modal-shell">
       <header class="schedule-modal-head">
         <div>
-          <strong>課表</strong>
-          <span class="schedule-modal-hint">點格子可直接搜尋該星期＋節次的課</span>
+          <strong>我的課表</strong>
+          <span class="schedule-modal-hint">點選節次即可搜尋可加入的課程</span>
         </div>
         <button type="button" id="closeScheduleModalBtn" class="secondary">關閉</button>
       </header>
@@ -33,28 +33,28 @@
       max-width: none;
       max-height: none;
       padding: 0;
-      border: 1px solid #d0d5dd;
-      border-radius: 18px;
+      border: 1px solid #d7ddd7;
+      border-radius: 12px;
       overflow: hidden;
       background: #fff;
-      box-shadow: 0 28px 80px rgba(16, 24, 40, .25);
+      box-shadow: 0 30px 90px rgba(18, 31, 22, .23);
     }
-    .schedule-modal::backdrop { background: rgba(15, 23, 42, .56); backdrop-filter: blur(2px); }
+    .schedule-modal::backdrop { background: rgba(22, 34, 26, .52); }
     .schedule-modal-shell { display: flex; flex-direction: column; height: 100%; min-height: 0; }
     .schedule-modal-head {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 12px;
-      padding: 12px 14px;
-      border-bottom: 1px solid #eaecf0;
+      padding: 14px 19px;
+      border-bottom: 1px solid #e5e9e5;
       background: #fff;
       flex: 0 0 auto;
     }
     .schedule-modal-head > div { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
-    .schedule-modal-head strong { font-size: 1rem; }
-    .schedule-modal-hint { color: #667085; font-size: .82rem; }
-    .schedule-modal-frame { width: 100%; height: 100%; flex: 1 1 auto; min-height: 0; border: 0; background: #f5f7fa; }
+    .schedule-modal-head strong { font-size: 1.05rem; font-weight: 730; }
+    .schedule-modal-hint { color: #78817a; font-size: .81rem; }
+    .schedule-modal-frame { width: 100%; height: 100%; flex: 1 1 auto; min-height: 0; border: 0; background: #f7f7f5; }
     @media (max-width: 720px) {
       .schedule-modal { width: 100vw; height: 100dvh; border: 0; border-radius: 0; }
       .schedule-modal-hint { display: none; }
@@ -73,7 +73,7 @@
       const embeddedStyle = doc.createElement('style');
       embeddedStyle.id = 'embeddedScheduleStyle';
       embeddedStyle.textContent = `
-        body { background: #f5f7fa !important; }
+        body { background: #f7f7f5 !important; }
         .schedule-shell { max-width: none !important; padding: 14px !important; }
         .schedule-shell > .hero { display: none !important; }
         #openInSearchBtn { display: none !important; }
