@@ -4,12 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>輔大選課工具</title>
+  <link rel="icon" type="image/svg+xml" href="/static/brand-mark.svg" />
   <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
   <main class="shell product-shell">
     <nav class="app-rail" aria-label="主要導覽">
-      <div class="rail-brand" aria-label="輔大選課">F<span>輔大選課</span></div>
+      <div class="rail-brand" aria-label="輔大選課工具"><img src="/static/brand-mark.svg" width="42" height="42" alt="輔大選課工具 Logo" /><span>輔大選課</span></div>
       <div class="rail-navigation">
         <button type="button" id="allCoursesTab" class="rail-item selected" aria-pressed="true">
           <span class="rail-icon" aria-hidden="true">⌕</span><span class="rail-label">探索課程</span>
@@ -52,11 +53,15 @@
       </div>
       <p class="filter-intro">調整條件後將自動更新結果</p>
       <div class="quick-filter-grid">
-        <label class="field"><span>系所</span>
-          <input id="departmentLookup" type="search" list="departmentSuggestions" autocomplete="off" placeholder="搜尋系名或代碼" aria-label="搜尋系所" />
-          <datalist id="departmentSuggestions"></datalist>
+        <div class="field lookup-field" id="departmentLookupField">
+          <label for="departmentLookup"><span>系所</span></label>
+          <div class="lookup-input-row">
+            <input id="departmentLookup" type="search" autocomplete="off" placeholder="輸入系名或代碼" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="departmentMenu" aria-label="搜尋並選擇系所" />
+            <button class="lookup-toggle" id="departmentLookupToggle" type="button" aria-label="展開系所選單" aria-controls="departmentMenu">⌄</button>
+          </div>
+          <div id="departmentMenu" class="lookup-menu hidden" role="listbox" aria-label="系所選項"></div>
           <select id="departmentSelect" hidden><option value="">全部系所</option></select>
-        </label>
+        </div>
         <div class="field"><span>年級（可複選）</span>
           <select id="gradeSelect" hidden><option value="">全部年級</option></select>
           <div id="gradeChips" class="chip-grid" aria-label="年級複選"></div>
@@ -69,11 +74,15 @@
           <div id="weekdayChips" class="chip-grid" aria-label="星期複選"></div>
         </div>
         <label class="field"><span>節次</span><select id="sectionSelect"><option value="">全部節次</option></select></label>
-        <label class="field"><span>教室</span>
-          <input id="roomLookup" type="search" list="roomSuggestions" autocomplete="off" placeholder="搜尋教室代碼" aria-label="搜尋教室" />
-          <datalist id="roomSuggestions"></datalist>
+        <div class="field lookup-field" id="roomLookupField">
+          <label for="roomLookup"><span>教室</span></label>
+          <div class="lookup-input-row">
+            <input id="roomLookup" type="search" autocomplete="off" placeholder="輸入教室，例如 A205" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="roomMenu" aria-label="搜尋並選擇教室" />
+            <button class="lookup-toggle" id="roomLookupToggle" type="button" aria-label="展開教室選單" aria-controls="roomMenu">⌄</button>
+          </div>
+          <div id="roomMenu" class="lookup-menu hidden" role="listbox" aria-label="教室選項"></div>
           <select id="roomSelect" hidden><option value="">全部教室</option></select>
-        </label>
+        </div>
         <label class="field"><span>學分</span><select id="creditsSelect"><option value="">不限學分</option></select></label>
         <label class="field"><span>必／選修</span><select id="reqSelect"><option value="">全部</option></select></label>
       </div>
