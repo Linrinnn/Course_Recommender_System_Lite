@@ -496,7 +496,14 @@ input:disabled, select:disabled { color: #9ca59e; background: #f7f8f6; }
   .brand-mark { width: 36px; height: 36px; flex-basis: 36px; border-radius: 8px; font-size: 1.2rem; }
   .hero h1 { font-size: 1.05rem; }
   .hero .eyebrow { font-size: .59rem; }
-  .hero #termText { display: none; }
+  .hero #termText {
+    display: block;
+    font-size: .7rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: min(52vw, 260px);
+  }
   .hero-actions { width: auto; flex-wrap: nowrap; gap: 5px; }
   .hero-actions > * { flex: initial; width: auto; min-width: 0; }
   #refreshBtn { font-size: 0; width: 37px; height: 37px; padding: 0; }
