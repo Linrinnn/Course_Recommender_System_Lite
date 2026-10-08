@@ -1088,3 +1088,21 @@ dialog.detail-dialog .detail-grid dd { font-size: .88rem; line-height: 1.7; colo
 @media (prefers-reduced-motion: reduce) {
   dialog.detail-dialog[open] { animation: none; }
 }
+
+/* Rail course count keeps the navigation badge instead of the old header pill. */
+.product-shell .app-rail #scheduleCount {
+  display: inline-block;
+  margin: 0;
+  padding: 1px 3px;
+  background: #eef3ef;
+  color: #5c7567;
+  border-radius: 5px;
+  font-size: .64rem;
+}
+.product-shell .rail-item.selected #favoriteCount { background: #d5e9df; color: #2b6159; }
+.product-shell .course-actions .outline-link:focus-visible,
+.product-shell .rail-item:focus-visible,
+.product-shell .favorite-btn:focus-visible {
+  outline: 2px solid #5e977e;
+  outline-offset: 3px;
+}
