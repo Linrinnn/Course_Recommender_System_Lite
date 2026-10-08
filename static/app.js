@@ -249,8 +249,12 @@ async function refreshLinkedOptions() {
     if (sequence !== linkedSequence) return;
     linkedOptions = options;
     const allowedGrades = new Set((options.grades || []).map((item) => String(item.value)));
-    for (const grade of [...selectedGrades]) if (!allowedGrades.has(grade)) selectedGrades.delete(grade);
+    let gradesChanged = false;
+    for (const grade of [...selectedGrades]) {
+      if (!allowedGrades.has(grade)) { selectedGrades.delete(grade); gradesChanged = true; }
+    }
     renderGradeChips();
+    if (gradesChanged) { refreshLinkedOptions(); queueSearch(); return; }
     const oldClass = $("#classSelect").value;
     fillSelect("#classSelect", options.classes || [], "全部班級");
     if (oldClass && $("#classSelect").value !== oldClass) queueSearch();
@@ -266,6 +270,7 @@ function applyUrlFilters() {
   const params = new URLSearchParams(location.search);
   const mappings = {
     q: "#searchInput", department: "#departmentSelect", weekday: "#weekdaySelect", section: "#sectionSelect", room: "#roomSelect", grade: "#gradeSelect", division: "#divisionSelect",
+    teacher: "#teacherInput", class_group: "#classSelect", time_of_day: "#timeOfDaySelect", schedule: "#scheduleSelect",
     study_level: "#studyLevelSelect", required_elective: "#reqSelect", course_tag: "#courseTagSelect", teaching_language: "#teachingLanguageSelect",
     material_language: "#materialLanguageSelect", teaching_method: "#teachingMethodSelect", assessment: "#assessmentSelect", assessment_style: "#assessmentStyleSelect",
     online_teaching: "#onlineTeachingSelect", relation: "#relationSelect", prerequisite: "#prerequisiteInput", detail_indexed: "#detailIndexedSelect", sort: "#sortSelect",
@@ -281,6 +286,10 @@ function applyUrlFilters() {
   selectedWeekdays = new Set(days.split(",").filter((v) => /^[1-7]$/.test(v)));
   $("#gradeSelect").value = "";
   $("#weekdaySelect").value = "";
+  const minCredits = params.get("min_credits"), maxCredits = params.get("max_credits");
+  if (minCredits && minCredits === maxCredits && [...$("#creditsSelect").options].some((opt) => opt.value === minCredits)) {
+    $("#creditsSelect").value = minCredits;
+  }
 }
 
 function collectFormValues() {
@@ -560,6 +569,33 @@ desktopQuery.addEventListener("change", (event) => {
   if (event.matches) setFilterPanelOpen(false, { restoreFocus: false });
 });
 
+// Update results as soon as filters change; do not require a separate Apply click.
+for (const select of document.querySelectorAll(".search-panel select:not([hidden])")) {
+  select.addEventListener("change", () => {
+    if (["divisionSelect", "studyLevelSelect"].includes(select.id)) {
+      $("#classSelect").value = "";
+      refreshLinkedOptions();
+    }
+    queueSearch();
+  });
+}
+for (const selector of ["#teacherInput", "#prerequisiteInput"]) {
+  $(selector).addEventListener("input", () => queueSearch(350));
+}
+$("#searchInput").addEventListener("input", () => queueSearch(350));
+for (const kind of ["department", "room"]) {
+  const input = kind === "department" ? $("#departmentLookup") : $("#roomLookup");
+  input.addEventListener("input", () => commitLookup(kind));
+  input.addEventListener("change", () => commitLookup(kind, true));
+  input.addEventListener("blur", () => {
+    commitLookup(kind, true);
+    const select = kind === "department" ? $("#departmentSelect") : $("#roomSelect");
+    if (!select.value && input.value.trim()) {
+      input.value = "";
+      input.title = "請從清單選擇有效的條件";
+    }
+  });
+}
 $("#allCoursesTab").addEventListener("click", () => { viewMode = "all"; search({ resetPage: true }); });
 $("#favoritesTab").addEventListener("click", () => { viewMode = "favorites"; search({ resetPage: true }); });
 $("#conflictFreeBtn").addEventListener("click", () => { avoidConflicts = !avoidConflicts; search({ resetPage: true }); });
