@@ -38,6 +38,49 @@ class ConflictFilterTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(data["total_pages"], 2)
                 self.assertEqual({item["id"] for item in data["items"]}, {"2", "3"})
 
+    async def test_combined_weekday_and_section_match_same_meeting(self):
+        first = sample("1", 1, ["D1"])
+        first["meetings"].append({"weekday": 2, "sections": ["D5"]})
+        second = sample("2", 2, ["D1"])
+        third = sample("3", 1, ["D5"])
+        with patch("app._load_courses", new=AsyncMock(return_value=[first, second, third])):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                response = await client.get("/api/courses", params={"weekdays": "1", "sections": "D5"})
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual([c["id"] for c in response.json()["items"]], ["3"])
+
+    async def test_grade_weekday_multiselect_with_class_group(self):
+        courses = [
+            {**sample("1", 1, ["D1"]), "grade": 1, "class_group": "甲"},
+            {**sample("2", 2, ["D1"]), "grade": 2, "class_group": "乙"},
+            {**sample("3", 3, ["D1"]), "grade": 3, "class_group": "乙"},
+            {**sample("4", 4, ["D1"]), "grade": 2, "class_group": "甲"},
+        ]
+        with patch("app._load_courses", new=AsyncMock(return_value=courses)):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                response = await client.get("/api/courses", params={
+                    "grades": "1,2", "weekdays": "1,2,3", "class_group": "乙"
+                })
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual([c["id"] for c in response.json()["items"]], ["2"])
+
+    async def test_linked_filter_options(self):
+        courses = [
+            {**sample("1", 1, ["D1"]), "grade": 1, "class_group": "甲", "division": "日間部"},
+            {**sample("2", 2, ["D1"]), "grade": 2, "class_group": "乙", "division": "日間部"},
+            {**sample("3", 2, ["D1"]), "grade": 2, "class_group": "甲", "division": "進修部"},
+            {**sample("4", 1, ["D1"]), "grade": 1, "class_group": "丙", "department": "其他系"},
+        ]
+        with patch("app._load_courses", new=AsyncMock(return_value=courses)):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                response = await client.get("/api/filter-options", params={
+                    "department": "資訊工程學系", "division": "日間部", "grades": "2"
+                })
+                self.assertEqual(response.status_code, 200)
+                data = response.json()
+                self.assertEqual({str(item["value"]) for item in data["grades"]}, {"1", "2"})
+                self.assertEqual({item["value"] for item in data["classes"]}, {"乙"})
+
     async def test_bad_exclusion_ignored_and_other_weekday_untouched(self):
         items = [sample("1", 1, ["D1"]), sample("2", 2, ["D1"])]
         with patch("app._load_courses", new=AsyncMock(return_value=items)):
