@@ -4,7 +4,7 @@
 
   const count = button.querySelector('#scheduleCount');
   if (button.firstChild?.nodeType === Node.TEXT_NODE) {
-    button.firstChild.textContent = '查看課表 ';
+    button.firstChild.textContent = '我的課表 ';
   }
   if (count) count.setAttribute('aria-label', '目前課表課程數');
 
