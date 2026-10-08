@@ -1,7 +1,29 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="輔大選課工具">
-  <title>輔大選課工具</title>
-  <rect width="64" height="64" rx="15" fill="#245C4F"/>
-  <path d="M18 17h28M18 17v30M18 32h23" stroke="#FFF" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
-  <rect x="34" y="38" width="7" height="7" rx="2" fill="#BCE5CE"/>
-  <rect x="44" y="38" width="7" height="7" rx="2" fill="#BCE5CE"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72" role="img" aria-labelledby="brandTitle brandDesc">
+  <title id="brandTitle">輔大選課</title>
+  <desc id="brandDesc">深綠色 F 字型曲線與課表方塊構成的選課工具標誌</desc>
+  <defs>
+    <linearGradient id="ink" x1="0" y1="1" x2=".9" y2="0">
+      <stop offset="0" stop-color="#084537"/>
+      <stop offset=".52" stop-color="#187058"/>
+      <stop offset="1" stop-color="#85B89A"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#E9F1D4"/>
+      <stop offset=".55" stop-color="#AFD2AA"/>
+      <stop offset="1" stop-color="#4D9B7A"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFE6A0"/>
+      <stop offset="1" stop-color="#DFA53C"/>
+    </linearGradient>
+  </defs>
+  <rect width="72" height="72" rx="17" fill="#F3F6EF"/>
+  <path d="M16 57V31C16 18 25 12 38 12H57V23H39C31 23 27 27 27 34V57Z" fill="url(#ink)"/>
+  <path d="M16 31C16 18 25 12 38 12H57V20H38C27 20 21 25 16 34Z" fill="url(#shine)" opacity=".93"/>
+  <path d="M24 35C28 28 33 27 42 27H57V36H41C33 36 30 40 27 45Z" fill="#064B3B"/>
+  <rect x="34" y="40" width="10" height="10" rx="3" fill="#E1EBCB"/>
+  <rect x="47" y="40" width="10" height="10" rx="3" fill="#C8DDBD"/>
+  <rect x="34" y="53" width="10" height="9" rx="3" fill="#C5D9B9"/>
+  <rect x="47" y="53" width="10" height="9" rx="3" fill="url(#gold)"/>
+  <path d="M56.5 39C58 37 61 36.5 63 36.5C62 40 60.5 42.5 57 43Z" fill="#E6B553"/>
 </svg>
