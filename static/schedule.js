@@ -370,9 +370,11 @@ async function importBackup(file){
     const key=backup.academicYear!=null&&backup.semester!=null?termKey(backup.academicYear,backup.semester):activeTerm;
     for(const plan of backup.plans)if(!plan.termKey)plan.termKey=key;
     state=backup;
+    const hasCurrent=backup.plans.some(p=>p.termKey===activeTerm);
     if(meta)activateTerm(meta);
     else saveState();
-    renderAll();notify("備份已匯入成功。");
+    renderAll();
+    notify(hasCurrent?"備份已匯入成功。":"匯入成功，但備份屬其他學期。原方案已保留，當前學期另外建立空白方案。");
   }catch(error){notify("無法匯入："+error.message);}
   finally {$("#backupFile").value="";}
 }
