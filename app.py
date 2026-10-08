@@ -262,11 +262,41 @@ async def facets() -> dict[str, Any]:
     }
 
 
+@app.get("/api/filter-options")
+async def filter_options(
+    department: str = Query("", max_length=120),
+    division: str = Query("", max_length=80),
+    study_level: str = Query("", max_length=30),
+    grades: str = Query("", max_length=100),
+) -> dict[str, Any]:
+    """Return only grades and classes that exist in the chosen department/division."""
+    selected_grades = {int(value) for value in grades.split(",") if value.strip().isdigit() and 1 <= int(value) <= 8}
+    courses = await _load_courses()
+    scoped = [
+        course for course in courses
+        if (not department or (
+            str(course.get("department") or "").casefold() == department.casefold()
+            or str(course.get("department_code") or "").casefold() == department.casefold()
+        ))
+        and (not division or str(course.get("division") or "").casefold() == division.casefold())
+        and (not study_level or str(course.get("study_level") or "") == study_level)
+    ]
+    by_grade = [
+        course for course in scoped
+        if not selected_grades or course.get("grade") in selected_grades
+    ]
+    return {
+        "grades": _numeric_options([course.get("grade") for course in scoped], " 年級"),
+        "classes": counted_options(course.get("class_group") for course in by_grade),
+    }
+
+
 @app.get("/api/courses")
 async def courses(
     q: str = Query("", max_length=200),
     department: str = Query("", max_length=120),
     grade: int | None = Query(None, ge=1, le=8),
+    grades: str = Query("", max_length=100),
     division: str = Query("", max_length=80),
     study_level: str = Query("", max_length=30),
     required_elective: str = Query("", max_length=60),
@@ -275,6 +305,7 @@ async def courses(
     instructor: str = Query("", max_length=200),
     class_group: str = Query("", max_length=100),
     weekday: int | None = Query(None, ge=1, le=7),
+    weekdays: str = Query("", max_length=100),
     section: str = Query("", max_length=20),
     sections: str = Query("", max_length=200),
     room: str = Query("", max_length=80),
@@ -307,6 +338,13 @@ async def courses(
     items = await _load_courses()
     query = q.strip()
     selected_sections = _comma_set(sections, upper=True)
+    selected_grades = {int(v) for v in grades.split(",") if v.strip().isdigit() and 1 <= int(v) <= 8}
+    selected_days = {int(v) for v in weekdays.split(",") if v.strip().isdigit() and 1 <= int(v) <= 7}
+    if not selected_grades and grade is not None:
+        selected_grades.add(grade)
+    if not selected_days and weekday is not None:
+        selected_days.add(weekday)
+    requested_sections = selected_sections | ({section.upper()} if section else set())
     excluded_slots = {
         part
         for value in exclude_slots.split(",")
@@ -325,7 +363,7 @@ async def courses(
             continue
         if department and course.get("department", "").casefold() != department.casefold():
             continue
-        if grade and course.get("grade") != grade:
+        if selected_grades and course.get("grade") not in selected_grades:
             continue
         if division and course.get("division", "").casefold() != division.casefold():
             continue
@@ -356,13 +394,13 @@ async def courses(
             for meeting in meetings
         ):
             continue
-        if weekday and not any(meeting.get("weekday") == weekday for meeting in meetings):
-            continue
-        if section and not any(section.upper() in (meeting.get("sections") or []) for meeting in meetings):
-            continue
-        if selected_sections:
-            actual = {part for meeting in meetings for part in meeting.get("sections") or []}
-            if not actual.intersection(selected_sections):
+        # A selected day and section must occur in the same meeting.
+        if selected_days or requested_sections:
+            if not any(
+                (not selected_days or meeting.get("weekday") in selected_days)
+                and (not requested_sections or bool(set(meeting.get("sections") or []) & requested_sections))
+                for meeting in meetings
+            ):
                 continue
         if not _matches_time_of_day(course, time_of_day, include_unknown_schedule):
             continue

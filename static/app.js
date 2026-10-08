@@ -12,10 +12,12 @@ let totalResults = 0;
 let selectedSections = new Set();
 let state = loadState();
 const favoriteKey = "fju-course-liteplus:favorites-v1";
-const viewKey = "fju-course-liteplus:saved-views-v1";
 let favoriteCourses = loadLocalList(favoriteKey);
-let savedViews = loadLocalList(viewKey);
-let comparedCourses = [];
+let selectedGrades = new Set();
+let selectedWeekdays = new Set();
+let linkedOptions = null;
+let linkedSequence = 0;
+let filterDebounce;
 let viewMode = "all";
 let avoidConflicts = new URLSearchParams(location.search).get("avoid_conflicts") === "1";
 let searchSequence = 0;
@@ -40,18 +42,11 @@ function snapshotCourse(course) {
   return Object.fromEntries(fields.map((name) => [name, course[name] ?? null]));
 }
 function hasFavorite(id) { return favoriteCourses.some((course) => String(course.id) === String(id)); }
-function compareHas(id) { return comparedCourses.some((course) => String(course.id) === String(id)); }
 function toggleFavorite(course) {
   if (hasFavorite(course.id)) favoriteCourses = favoriteCourses.filter((item) => String(item.id) !== String(course.id));
   else favoriteCourses.unshift(snapshotCourse(course));
   persistList(favoriteKey, favoriteCourses);
   if (viewMode === "favorites") search({ updateUrl: false }); else renderCourses();
-}
-function toggleCompare(course) {
-  if (compareHas(course.id)) comparedCourses = comparedCourses.filter((item) => String(item.id) !== String(course.id));
-  else if (comparedCourses.length >= 3) return window.alert("最多可同時比較三門課程。");
-  else comparedCourses.push(snapshotCourse(course));
-  renderCourses();
 }
 function blockedSlots() {
   const used = new Set();
@@ -74,8 +69,6 @@ function updateCourseToolsUI() {
   $("#favoritesTab").setAttribute("aria-pressed", String(viewMode === "favorites"));
   $("#conflictFreeBtn").classList.toggle("selected", avoidConflicts);
   $("#conflictFreeBtn").setAttribute("aria-pressed", String(avoidConflicts));
-  $("#compareCount").textContent = String(comparedCourses.length);
-  $("#compareOpenBtn").disabled = comparedCourses.length < 2;
   const message = $("#viewMessage");
   const parts = [];
   if (viewMode === "favorites") parts.push("收藏課程儲存在此瀏覽器；僅套用關鍵字及基本篩選。");
@@ -83,50 +76,6 @@ function updateCourseToolsUI() {
   message.textContent = parts.join(" ");
   message.classList.toggle("hidden", !parts.length);
 }
-function renderSavedViews() {
-  const select = $("#savedViewsSelect");
-  const previous = select.value;
-  select.replaceChildren(new Option("選擇已儲存的條件", ""));
-  savedViews.forEach((item) => select.append(new Option(item.name, item.id)));
-  if ([...select.options].some((option) => option.value === previous)) select.value = previous;
-  $("#deleteViewBtn").disabled = !select.value;
-}
-function saveCurrentView() {
-  const name = window.prompt("這組篩選條件的名稱", "常用課表")?.trim();
-  if (!name) return;
-  savedViews.push({
-    id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
-    name: name.slice(0, 40),
-    values: collectFormValues(),
-    sections: [...selectedSections],
-    avoidConflicts,
-  });
-  savedViews = savedViews.slice(-12);
-  persistList(viewKey, savedViews);
-  renderSavedViews();
-  $("#savedViewsSelect").value = savedViews[savedViews.length - 1].id;
-  $("#deleteViewBtn").disabled = false;
-}
-function applySavedView(id) {
-  const saved = savedViews.find((item) => item.id === id);
-  if (!saved) return;
-  resetFilters({ searchNow: false });
-  restoreFormValues(saved.values || {});
-  selectedSections = new Set(saved.sections || []);
-  avoidConflicts = Boolean(saved.avoidConflicts);
-  viewMode = "all";
-  renderSectionChips();
-  search({ resetPage: true });
-}
-function deleteSavedView() {
-  const id = $("#savedViewsSelect").value;
-  if (!id) return;
-  savedViews = savedViews.filter((item) => item.id !== id);
-  persistList(viewKey, savedViews);
-  renderSavedViews();
-}
-
-
 function makeId() { return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`; }
 function loadState() {
   try { const parsed = JSON.parse(localStorage.getItem(stateKey) || "null"); if (parsed?.plans?.length && parsed.activePlanId) return parsed; } catch {}
@@ -186,14 +135,142 @@ function renderSectionChips() {
   for (const item of facets.sections || []) {
     const button = document.createElement("button"); button.type = "button"; button.className = `filter-chip${selectedSections.has(item.value) ? " selected" : ""}`; button.disabled = !item.count;
     button.innerHTML = `<span>${item.label}</span><small>${item.count ?? 0}</small>`;
-    button.addEventListener("click", () => { selectedSections.has(item.value) ? selectedSections.delete(item.value) : selectedSections.add(item.value); renderSectionChips(); updateFilterSummary(); });
+    button.setAttribute("aria-pressed", String(selectedSections.has(item.value)));
+    button.addEventListener("click", () => {
+      selectedSections.has(item.value) ? selectedSections.delete(item.value) : selectedSections.add(item.value);
+      renderSectionChips();
+      queueSearch();
+    });
     root.append(button);
   }
 }
+const weekdayNames = ["", "週一", "週二", "週三", "週四", "週五", "週六", "週日"];
+
+function queueSearch(delay = 180) {
+  clearTimeout(filterDebounce);
+  filterDebounce = setTimeout(() => search({ resetPage: true }), delay);
+}
+
+function renderChoiceChips(rootId, options, selected, onChange) {
+  const root = $(rootId);
+  root.replaceChildren();
+  for (const item of options) {
+    const value = String(item.value);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `filter-chip${selected.has(value) ? " selected" : ""}`;
+    button.setAttribute("aria-pressed", String(selected.has(value)));
+    button.textContent = item.label;
+    button.addEventListener("click", () => {
+      if (selected.has(value)) selected.delete(value);
+      else selected.add(value);
+      onChange();
+    });
+    root.append(button);
+  }
+}
+
+function renderGradeChips() {
+  const options = linkedOptions?.grades || facets.grades || [];
+  renderChoiceChips("#gradeChips", options, selectedGrades, () => {
+    renderGradeChips();
+    refreshLinkedOptions();
+    queueSearch();
+  });
+}
+function renderWeekdayChips() {
+  renderChoiceChips("#weekdayChips",
+    Array.from({ length: 7 }, (_, index) => ({ value: String(index + 1), label: weekdayNames[index + 1] })),
+    selectedWeekdays, () => { renderWeekdayChips(); queueSearch(); });
+}
+
+function updateLookupValue(kind) {
+  const select = kind === "department" ? $("#departmentSelect") : $("#roomSelect");
+  const input = kind === "department" ? $("#departmentLookup") : $("#roomLookup");
+  const entries = kind === "department" ? facets.departments || [] : facets.rooms || [];
+  const item = entries.find((entry) => String(entry.value) === select.value);
+  input.value = item ? String(item.label) : "";
+}
+function fillLookupOptions() {
+  for (const [selector, entries] of [
+    ["#departmentSuggestions", facets.departments || []],
+    ["#roomSuggestions", facets.rooms || []],
+  ]) {
+    const root = $(selector);
+    root.replaceChildren();
+    for (const entry of entries) {
+      const option = document.createElement("option");
+      option.value = String(entry.label);
+      option.label = String(entry.value);
+      root.append(option);
+    }
+  }
+  updateLookupValue("department");
+  updateLookupValue("room");
+}
+function commitLookup(kind, allowPartial = false) {
+  const select = kind === "department" ? $("#departmentSelect") : $("#roomSelect");
+  const input = kind === "department" ? $("#departmentLookup") : $("#roomLookup");
+  const items = kind === "department" ? facets.departments || [] : facets.rooms || [];
+  const value = input.value.trim().toLowerCase();
+  const exact = items.find((item) =>
+    String(item.label).toLowerCase() === value || String(item.value).toLowerCase() === value);
+  const potential = allowPartial && !exact && value ? items.filter((item) =>
+    String(item.label).toLowerCase().includes(value) || String(item.value).toLowerCase().includes(value)) : [];
+  const chosen = exact || (potential.length === 1 ? potential[0] : null);
+  const nextValue = chosen ? String(chosen.value) : "";
+  const changed = select.value !== nextValue;
+  select.value = nextValue;
+  if (chosen) input.value = String(chosen.label);
+  else if (!value) input.value = "";
+  if (changed) {
+    if (kind === "department") {
+      selectedGrades.clear();
+      $("#classSelect").value = "";
+      refreshLinkedOptions();
+    }
+    queueSearch();
+  }
+}
+
+async function refreshLinkedOptions() {
+  if (!facets.grades) return;
+  const sequence = ++linkedSequence;
+  const params = new URLSearchParams();
+  for (const [key, selector] of [
+    ["department", "#departmentSelect"], ["division", "#divisionSelect"],
+    ["study_level", "#studyLevelSelect"],
+  ]) if ($(selector).value) params.set(key, $(selector).value);
+  if (selectedGrades.size) params.set("grades", [...selectedGrades].join(","));
+  try {
+    const response = await fetch(`/api/filter-options?${params}`);
+    if (!response.ok) throw new Error("無法取得班級選項");
+    const options = await response.json();
+    if (sequence !== linkedSequence) return;
+    linkedOptions = options;
+    const allowedGrades = new Set((options.grades || []).map((item) => String(item.value)));
+    let gradesChanged = false;
+    for (const grade of [...selectedGrades]) {
+      if (!allowedGrades.has(grade)) { selectedGrades.delete(grade); gradesChanged = true; }
+    }
+    renderGradeChips();
+    if (gradesChanged) { refreshLinkedOptions(); queueSearch(); return; }
+    const oldClass = $("#classSelect").value;
+    fillSelect("#classSelect", options.classes || [], "全部班級");
+    if (oldClass && $("#classSelect").value !== oldClass) queueSearch();
+  } catch (error) {
+    if (sequence === linkedSequence) {
+      linkedOptions = null;
+      renderGradeChips();
+    }
+  }
+}
+
 function applyUrlFilters() {
   const params = new URLSearchParams(location.search);
   const mappings = {
     q: "#searchInput", department: "#departmentSelect", weekday: "#weekdaySelect", section: "#sectionSelect", room: "#roomSelect", grade: "#gradeSelect", division: "#divisionSelect",
+    teacher: "#teacherInput", class_group: "#classSelect", time_of_day: "#timeOfDaySelect", schedule: "#scheduleSelect",
     study_level: "#studyLevelSelect", required_elective: "#reqSelect", course_tag: "#courseTagSelect", teaching_language: "#teachingLanguageSelect",
     material_language: "#materialLanguageSelect", teaching_method: "#teachingMethodSelect", assessment: "#assessmentSelect", assessment_style: "#assessmentStyleSelect",
     online_teaching: "#onlineTeachingSelect", relation: "#relationSelect", prerequisite: "#prerequisiteInput", detail_indexed: "#detailIndexedSelect", sort: "#sortSelect",
@@ -203,6 +280,16 @@ function applyUrlFilters() {
     if (node.tagName === "SELECT") { if ([...node.options].some((opt) => opt.value === value)) node.value = value; } else node.value = value;
   }
   const sections = params.get("sections"); if (sections) selectedSections = new Set(sections.split(",").filter(Boolean));
+  const grades = params.get("grades") || params.get("grade") || "";
+  const days = params.get("weekdays") || params.get("weekday") || "";
+  selectedGrades = new Set(grades.split(",").filter((v) => /^[1-8]$/.test(v)));
+  selectedWeekdays = new Set(days.split(",").filter((v) => /^[1-7]$/.test(v)));
+  $("#gradeSelect").value = "";
+  $("#weekdaySelect").value = "";
+  const minCredits = params.get("min_credits"), maxCredits = params.get("max_credits");
+  if (minCredits && minCredits === maxCredits && [...$("#creditsSelect").options].some((opt) => opt.value === minCredits)) {
+    $("#creditsSelect").value = minCredits;
+  }
 }
 
 function collectFormValues() {
@@ -225,10 +312,14 @@ async function loadMetaAndFacets({ preserveValues = false } = {}) {
   ].filter(Boolean).join("  ·  ");
   fillSelect("#departmentSelect", facets.departments, "全部系所"); fillSelect("#sectionSelect", (facets.sections || []).filter((item) => item.count), "全部節次"); fillSelect("#roomSelect", facets.rooms, "全部教室"); fillSelect("#creditsSelect", facets.credits, "不限學分");
   fillSelect("#reqSelect", facets.required_elective, "全部"); fillSelect("#divisionSelect", facets.divisions, "全部部別"); fillSelect("#gradeSelect", facets.grades, "全部年級"); fillSelect("#studyLevelSelect", facets.study_levels, "全部層級");
-  fillSelect("#courseTagSelect", facets.course_tags, "全部標籤"); fillSelect("#classSelect", facets.classes, "全部班別"); fillSelect("#teachingLanguageSelect", facets.teaching_languages, "全部授課語言"); fillSelect("#materialLanguageSelect", facets.material_languages, "全部教材語言");
+  fillSelect("#courseTagSelect", facets.course_tags, "全部標籤"); fillSelect("#classSelect", facets.classes, "全部班級"); fillSelect("#teachingLanguageSelect", facets.teaching_languages, "全部授課語言"); fillSelect("#materialLanguageSelect", facets.material_languages, "全部教材語言");
   fillSelect("#teachingMethodSelect", facets.teaching_methods, "全部教學方式"); fillSelect("#assessmentSelect", facets.assessments, "全部評量方式"); fillSelect("#relationSelect", facets.relations, "全部能力／議題"); fillDatalist("#teacherOptions", facets.teachers); renderSectionChips();
   if (previous) restoreFormValues(previous); else applyUrlFilters();
-  renderSavedViews();
+  fillLookupOptions();
+  renderGradeChips();
+  renderWeekdayChips();
+  renderSectionChips();
+  await refreshLinkedOptions();
   updateCourseToolsUI();
   const indexed = meta.detail_indexed || 0; const total = meta.course_count || 0;
   $("#enrichedCoverageText").textContent = indexed >= total && total
@@ -242,6 +333,8 @@ function buildSearchParams() {
   const mappings = [["q", "#searchInput"], ["department", "#departmentSelect"], ["grade", "#gradeSelect"], ["division", "#divisionSelect"], ["study_level", "#studyLevelSelect"], ["required_elective", "#reqSelect"], ["course_tag", "#courseTagSelect"], ["teacher", "#teacherInput"], ["class_group", "#classSelect"], ["weekday", "#weekdaySelect"], ["section", "#sectionSelect"], ["room", "#roomSelect"], ["time_of_day", "#timeOfDaySelect"], ["schedule", "#scheduleSelect"], ["teaching_language", "#teachingLanguageSelect"], ["material_language", "#materialLanguageSelect"], ["teaching_method", "#teachingMethodSelect"], ["assessment", "#assessmentSelect"], ["assessment_style", "#assessmentStyleSelect"], ["online_teaching", "#onlineTeachingSelect"], ["relation", "#relationSelect"], ["prerequisite", "#prerequisiteInput"], ["detail_indexed", "#detailIndexedSelect"], ["teaching_method_criterion", "#teachingMethodCriterionSelect"], ["teaching_method_min", "#teachingMethodMinInput"], ["assessment_criterion", "#assessmentCriterionSelect"], ["assessment_min", "#assessmentMinInput"]];
   const defaults = new Map([["time_of_day", "all"], ["schedule", "all"], ["assessment_style", "all"], ["online_teaching", "all"], ["detail_indexed", "all"], ["teaching_method_criterion", "dominant"], ["assessment_criterion", "dominant"]]);
   for (const [key, selector] of mappings) { const value = $(selector).value.trim(); if (value && value !== defaults.get(key)) params.set(key, value); }
+  if (selectedGrades.size) params.set("grades", [...selectedGrades].join(","));
+  if (selectedWeekdays.size) params.set("weekdays", [...selectedWeekdays].join(","));
   const credits = $("#creditsSelect").value; if (credits) { params.set("min_credits", credits); params.set("max_credits", credits); }
   if (selectedSections.size) params.set("sections", [...selectedSections].join(","));
   if ($("#timeOfDaySelect").value !== "all") params.set("include_unknown_schedule", "false");
@@ -253,35 +346,43 @@ function buildSearchParams() {
   return params;
 }
 function updateFilterSummary() {
-  const parts = []; const mappings = [["#departmentSelect", "系所"], ["#weekdaySelect", "星期"], ["#sectionSelect", "節次"], ["#roomSelect", "教室"], ["#creditsSelect", "學分"], ["#reqSelect", "必選修"], ["#divisionSelect", "部別"], ["#gradeSelect", "年級"], ["#studyLevelSelect", "層級"], ["#courseTagSelect", "標籤"], ["#teacherInput", "教師"], ["#classSelect", "班別"], ["#teachingLanguageSelect", "授課語言"], ["#materialLanguageSelect", "教材語言"], ["#teachingMethodSelect", "教學方式"], ["#assessmentSelect", "評量方式"], ["#relationSelect", "能力／議題"], ["#prerequisiteInput", "先修"]];
+  const parts = []; const mappings = [["#departmentSelect", "系所"], ["#sectionSelect", "節次"], ["#roomSelect", "教室"], ["#creditsSelect", "學分"], ["#reqSelect", "必選修"], ["#divisionSelect", "部別"], ["#studyLevelSelect", "層級"], ["#courseTagSelect", "標籤"], ["#teacherInput", "教師"], ["#classSelect", "班別"], ["#teachingLanguageSelect", "授課語言"], ["#materialLanguageSelect", "教材語言"], ["#teachingMethodSelect", "教學方式"], ["#assessmentSelect", "評量方式"], ["#relationSelect", "能力／議題"], ["#prerequisiteInput", "先修"]];
   for (const [selector, label] of mappings) { const node = $(selector); if (!node?.value) continue; const text = node.tagName === "SELECT" ? node.selectedOptions[0].textContent.replace(/（\d+）$/, "") : node.value; parts.push(`${label}：${text}`); }
+  if (selectedGrades.size) parts.push(`年級：${[...selectedGrades].sort().join("、")}`);
+  if (selectedWeekdays.size) parts.push(`星期：${[...selectedWeekdays].sort().map((value) => weekdayNames[Number(value)]).join("、")}`);
   if ($("#timeOfDaySelect").value !== "all") parts.push(`時段：${$("#timeOfDaySelect").selectedOptions[0].textContent}`); if ($("#scheduleSelect").value !== "all") parts.push($("#scheduleSelect").selectedOptions[0].textContent);
   if ($("#assessmentStyleSelect").value !== "all") parts.push(`評量類型：${$("#assessmentStyleSelect").selectedOptions[0].textContent}`); if ($("#onlineTeachingSelect").value !== "all") parts.push(`線上：${$("#onlineTeachingSelect").selectedOptions[0].textContent}`); if ($("#detailIndexedSelect").value !== "all") parts.push($("#detailIndexedSelect").selectedOptions[0].textContent); if (selectedSections.size) parts.push(`精確節次：${[...selectedSections].join("、")}`);
   if (avoidConflicts) parts.push("避開衝堂");
   $("#activeFilterText").textContent = parts.length ? parts.join("｜") : "尚未設定篩選條件";
-  const advancedNodes = ["#divisionSelect", "#gradeSelect", "#studyLevelSelect", "#courseTagSelect", "#teacherInput", "#classSelect", "#teachingLanguageSelect", "#materialLanguageSelect", "#teachingMethodSelect", "#assessmentSelect", "#relationSelect", "#prerequisiteInput"];
+  const advancedNodes = ["#courseTagSelect", "#teacherInput", "#teachingLanguageSelect", "#materialLanguageSelect", "#teachingMethodSelect", "#assessmentSelect", "#relationSelect", "#prerequisiteInput"];
   let count = advancedNodes.filter((selector) => $(selector).value).length + selectedSections.size + Number($("#timeOfDaySelect").value !== "all") + Number($("#scheduleSelect").value !== "all") + Number($("#assessmentStyleSelect").value !== "all") + Number($("#onlineTeachingSelect").value !== "all") + Number($("#detailIndexedSelect").value !== "all"); $("#advancedCount").textContent = count;
 }
 
 function matchesFavoriteFilters(course, params) {
-  const q = (params.get("q") || "").toLowerCase().trim();
-  const haystack = [
-    course.name, course.name_en, course.course_code,
-    course.teacher, course.department,
-  ].join(" ").toLowerCase();
-  if (q && !q.split(/\s+/).every((term) => haystack.includes(term))) return false;
+  const query = (params.get("q") || "").toLocaleLowerCase().trim();
+  const haystack = [course.name, course.name_en, course.course_code,
+    course.teacher, course.department].join(" ").toLocaleLowerCase();
+  if (query && !query.split(/\s+/).every((word) => haystack.includes(word))) return false;
   const department = params.get("department");
   if (department && course.department_code !== department && course.department !== department) return false;
-  const weekday = Number(params.get("weekday"));
-  const section = params.get("section");
+  const grades = new Set((params.get("grades") || params.get("grade") || "").split(",").map(Number).filter(Boolean));
+  if (grades.size && !grades.has(Number(course.grade))) return false;
+  const classGroup = params.get("class_group");
+  if (classGroup && !(course.class_group || "").includes(classGroup)) return false;
+  if (params.get("division") && course.division !== params.get("division")) return false;
+  if (params.get("study_level") && course.study_level !== params.get("study_level")) return false;
+  const selectedDays = new Set((params.get("weekdays") || params.get("weekday") || "").split(",").map(Number).filter(Boolean));
+  const requestedSections = new Set((params.get("sections") || "").split(",").filter(Boolean));
+  if (params.get("section")) requestedSections.add(params.get("section"));
+  if ((selectedDays.size || requestedSections.size) && !(course.meetings || []).some((meeting) =>
+    (!selectedDays.size || selectedDays.has(meeting.weekday))
+    && (!requestedSections.size || (meeting.sections || []).some((section) => requestedSections.has(section)))
+  )) return false;
   const room = params.get("room");
-  if (weekday && !(course.meetings || []).some((m) => m.weekday === weekday)) return false;
-  if (section && !(course.meetings || []).some((m) => (m.sections || []).includes(section))) return false;
-  if (room && !(course.meetings || []).some((m) => m.room === room)) return false;
+  if (room && !(course.meetings || []).some((meeting) => meeting.room === room)) return false;
   const credits = params.get("min_credits");
   if (credits !== null && Number(course.credits_number) !== Number(credits)) return false;
-  const required = params.get("required_elective");
-  if (required && course.required_elective !== required) return false;
+  if (params.get("required_elective") && course.required_elective !== params.get("required_elective")) return false;
   if (avoidConflicts && courseOverlaps(course, blockedSlots())) return false;
   return true;
 }
@@ -312,12 +413,6 @@ function renderCourses() {
     favoriteButton.setAttribute("aria-label", isFavorite ? "取消收藏" : "加入收藏");
     favoriteButton.title = isFavorite ? "取消收藏" : "收藏課程";
     favoriteButton.addEventListener("click", () => toggleFavorite(course));
-    const compareButton = node.querySelector(".compare-btn");
-    const comparing = compareHas(course.id);
-    compareButton.textContent = comparing ? "✓ 已選比較" : "＋ 比較";
-    compareButton.classList.toggle("selected", comparing);
-    compareButton.setAttribute("aria-pressed", String(comparing));
-    compareButton.addEventListener("click", () => toggleCompare(course));
     const en = node.querySelector(".course-name-en"); en.textContent = course.name_en || ""; if (!course.name_en) en.classList.add("hidden");
     node.querySelector(".req-badge").textContent = course.required_elective || "未標示"; const indexBadge = node.querySelector(".index-badge"); indexBadge.textContent = course.detail_indexed ? "完整索引" : "基本資料"; indexBadge.classList.add(course.detail_indexed ? "fit-badge" : "neutral-badge");
     node.querySelector(".course-meta").textContent = [course.course_code, course.teacher, course.credits !== null && course.credits !== "" ? `${course.credits} 學分` : "", course.department, course.grade ? `${course.grade} 年級` : "", course.division, course.class_group, course.teaching_language ? `授課：${course.teaching_language}` : ""].filter(Boolean).join("｜");
@@ -443,72 +538,15 @@ async function showDetail(course) {
   try { const response = await fetch(`/api/course/${encodeURIComponent(course.id)}`); const detail = await response.json(); if (!response.ok) throw new Error(detail.detail || "完整資料載入失敗"); renderDetail(detail); if (!course.detail_indexed) { await loadMetaAndFacets({ preserveValues: true }); await search({ updateUrl: false }); } }
   catch (error) { $("#detailContent").innerHTML = `<div class="status">${escapeHtml(error.message)}</div>`; }
 }
-function renderComparison() {
-  const container = $("#compareContent");
-  container.replaceChildren();
-  if (comparedCourses.length < 2) return;
-  const table = document.createElement("table");
-  table.className = "comparison-table";
-  const fields = [
-    ["課號", (c) => c.course_code || "—"],
-    ["教師", (c) => c.teacher || "—"],
-    ["系所", (c) => c.department || "—"],
-    ["年級", (c) => c.grade ? `${c.grade} 年級` : "—"],
-    ["學分", (c) => c.credits_number ?? "—"],
-    ["必／選修", (c) => c.required_elective || "—"],
-    ["時間／教室", (c) => meetingLabel(c)],
-    ["互相衝堂", (c) => {
-      const conflicting = comparedCourses.filter((other) => other.id !== c.id && conflict(c, other));
-      return conflicting.length ? conflicting.map((other) => other.name).join("、") : "無";
-    }],
-  ];
-  const header = document.createElement("tr");
-  const first = document.createElement("th");
-  first.textContent = "比較項目";
-  header.append(first);
-  for (const course of comparedCourses) {
-    const cell = document.createElement("th");
-    const title = document.createElement("div");
-    title.className = "comparison-course-title";
-    title.textContent = course.name || "未命名課程";
-    const remove = document.createElement("button");
-    remove.type = "button";
-    remove.className = "comparison-remove";
-    remove.textContent = "移除比較";
-    remove.addEventListener("click", () => {
-      comparedCourses = comparedCourses.filter((item) => item.id !== course.id);
-      if (comparedCourses.length < 2) $("#compareDialog").close();
-      renderComparison();
-      renderCourses();
-    });
-    cell.append(title, remove);
-    header.append(cell);
-  }
-  const thead = document.createElement("thead");
-  thead.append(header);
-  table.append(thead);
-  const tbody = document.createElement("tbody");
-  for (const [label, format] of fields) {
-    const row = document.createElement("tr");
-    const heading = document.createElement("th");
-    heading.textContent = label;
-    row.append(heading);
-    for (const course of comparedCourses) {
-      const cell = document.createElement("td");
-      cell.textContent = String(format(course));
-      row.append(cell);
-    }
-    tbody.append(row);
-  }
-  table.append(tbody);
-  container.append(table);
-}
-
 function resetFilters({ searchNow = true } = {}) {
-  for (const selector of ["#searchInput", "#teacherInput", "#prerequisiteInput"]) $(selector).value = "";
+  for (const selector of ["#searchInput", "#teacherInput", "#prerequisiteInput", "#departmentLookup", "#roomLookup"]) $(selector).value = "";
   for (const selector of ["#departmentSelect", "#weekdaySelect", "#sectionSelect", "#roomSelect", "#creditsSelect", "#reqSelect", "#divisionSelect", "#gradeSelect", "#studyLevelSelect", "#courseTagSelect", "#classSelect", "#teachingLanguageSelect", "#materialLanguageSelect", "#teachingMethodSelect", "#assessmentSelect", "#relationSelect"]) $(selector).value = "";
   for (const selector of ["#timeOfDaySelect", "#scheduleSelect", "#assessmentStyleSelect", "#onlineTeachingSelect", "#detailIndexedSelect"]) $(selector).value = "all";
-  $("#sortSelect").value = "relevance"; $("#teachingMethodCriterionSelect").value = "dominant"; $("#assessmentCriterionSelect").value = "dominant"; $("#teachingMethodMinInput").value = "20"; $("#assessmentMinInput").value = "20"; selectedSections.clear(); avoidConflicts = false; renderSectionChips(); if (searchNow) search({ resetPage: true });
+  $("#sortSelect").value = "relevance"; $("#teachingMethodCriterionSelect").value = "dominant"; $("#assessmentCriterionSelect").value = "dominant"; $("#teachingMethodMinInput").value = "20"; $("#assessmentMinInput").value = "20"; selectedSections.clear(); selectedGrades.clear(); selectedWeekdays.clear();
+  avoidConflicts = false; linkedOptions = null;
+  renderSectionChips(); renderGradeChips(); renderWeekdayChips();
+  refreshLinkedOptions();
+  if (searchNow) search({ resetPage: true });
 }
 function openSchedule() { const popup = window.open("/schedule", "fjuCourseSchedule", "width=1380,height=940,resizable=yes,scrollbars=yes"); popup?.focus(); }
 
@@ -531,35 +569,36 @@ desktopQuery.addEventListener("change", (event) => {
   if (event.matches) setFilterPanelOpen(false, { restoreFocus: false });
 });
 
+// Update results as soon as filters change; do not require a separate Apply click.
+for (const select of document.querySelectorAll(".search-panel select:not([hidden])")) {
+  select.addEventListener("change", () => {
+    if (["divisionSelect", "studyLevelSelect"].includes(select.id)) {
+      $("#classSelect").value = "";
+      refreshLinkedOptions();
+    }
+    queueSearch();
+  });
+}
+for (const selector of ["#teacherInput", "#prerequisiteInput"]) {
+  $(selector).addEventListener("input", () => queueSearch(350));
+}
+$("#searchInput").addEventListener("input", () => queueSearch(350));
+for (const kind of ["department", "room"]) {
+  const input = kind === "department" ? $("#departmentLookup") : $("#roomLookup");
+  input.addEventListener("input", () => commitLookup(kind));
+  input.addEventListener("change", () => commitLookup(kind, true));
+  input.addEventListener("blur", () => {
+    commitLookup(kind, true);
+    const select = kind === "department" ? $("#departmentSelect") : $("#roomSelect");
+    if (!select.value && input.value.trim()) {
+      input.value = "";
+      input.title = "請從清單選擇有效的條件";
+    }
+  });
+}
 $("#allCoursesTab").addEventListener("click", () => { viewMode = "all"; search({ resetPage: true }); });
 $("#favoritesTab").addEventListener("click", () => { viewMode = "favorites"; search({ resetPage: true }); });
 $("#conflictFreeBtn").addEventListener("click", () => { avoidConflicts = !avoidConflicts; search({ resetPage: true }); });
-$("#compareOpenBtn").addEventListener("click", () => {
-  if (comparedCourses.length < 2) return;
-  renderComparison();
-  $("#compareDialog").showModal();
-});
-$("#closeCompareBtn").addEventListener("click", () => $("#compareDialog").close());
-$("#compareDialog").addEventListener("click", (event) => {
-  if (event.target === $("#compareDialog")) $("#compareDialog").close();
-});
-$("#copyCompareBtn").addEventListener("click", async () => {
-  const lines = comparedCourses.map((course) =>
-    [course.name, course.course_code, course.teacher, `${course.credits_number ?? "—"}學分`, meetingLabel(course)].join("｜")
-  );
-  try {
-    await navigator.clipboard.writeText(lines.join("\n"));
-    $("#copyCompareBtn").textContent = "已複製";
-  } catch {
-    window.prompt("複製比較摘要", lines.join("\n"));
-  }
-});
-$("#saveViewBtn").addEventListener("click", saveCurrentView);
-$("#savedViewsSelect").addEventListener("change", (event) => {
-  $("#deleteViewBtn").disabled = !event.target.value;
-  if (event.target.value) applySavedView(event.target.value);
-});
-$("#deleteViewBtn").addEventListener("click", deleteSavedView);
 document.addEventListener("keydown", (event) => {
   const target = event.target;
   if (event.key === "/" && !event.ctrlKey && !event.metaKey && !event.altKey
@@ -584,10 +623,6 @@ window.addEventListener("storage", (event) => {
   if (event.key === favoriteKey) {
     favoriteCourses = loadLocalList(favoriteKey);
     if (viewMode === "favorites") search({ updateUrl: false }); else renderCourses();
-  }
-  if (event.key === viewKey) {
-    savedViews = loadLocalList(viewKey);
-    renderSavedViews();
   }
 });
 
